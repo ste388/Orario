@@ -107,13 +107,19 @@
         import { getFirestore, doc, setDoc, onSnapshot, setLogLevel, getDocs, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // =========================================================================================
-        // CONFIGURAZIONE FIREBASE (Usa variabili di ambiente Canvas)
+        // CONFIGURAZIONE FIREBASE (Usa variabili di ambiente Canvas) - ORA CON GESTIONE ERRORI DI PARSING
         // =========================================================================================
         
-        // Determina la configurazione Firebase da usare, fornita dall'ambiente Canvas.
-        const firebaseConfig = typeof __firebase_config !== 'undefined' 
-            ? JSON.parse(__firebase_config) 
-            : null; 
+        let firebaseConfig = null;
+        try {
+            // Tentativo sicuro di parsing per catturare SyntaxError prima dell'avvio della UI
+            firebaseConfig = typeof __firebase_config !== 'undefined' && __firebase_config 
+                ? JSON.parse(__firebase_config) 
+                : null;
+        } catch (e) {
+            console.error("ERRORE DI PARSING CRITICO: La configurazione Firebase non è un JSON valido.", e);
+            // La configurazione rimane null, verrà gestita in setupFirebaseAndLoadData per visualizzare l'errore
+        }
 
         // Costanti Firebase fornite dall'ambiente
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
@@ -611,10 +617,10 @@
         async function setupFirebaseAndLoadData() {
             setLogLevel('debug');
 
-            // Verifica che la configurazione Firebase sia stata fornita correttamente dall'ambiente
+            // 1. Verifica che la configurazione Firebase sia stata caricata e sia valida
             if (!firebaseConfig || !firebaseConfig.apiKey) {
-                updateStatus('ERRORE CRITICO: Configurazione Firebase non disponibile. Impossibile connettersi al database.', 'error');
-                console.error("ERRORE: La configurazione Firebase è assente o incompleta.");
+                updateStatus('ERRORE CRITICO: La configurazione del database è assente o non valida (manca apiKey). Controlla la console per i dettagli specifici del parsing.', 'error');
+                console.error("ERRORE: Configurazione Firebase non disponibile o non valida. Configurazione attuale:", firebaseConfig);
                 return;
             }
 
@@ -624,12 +630,12 @@
                 db = getFirestore(app);
                 auth = getAuth(app);
                 
-                // 1. Inizializza il calendario e seleziona la data odierna
+                // 2. Inizializza il calendario e seleziona la data odierna
                 currentCalendarDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
                 renderCalendar(); 
                 selectDate(selectedDate); // Innesca il primo caricamento dati
                 
-                // 2. Autenticazione e Listener
+                // 3. Autenticazione e Listener
                 if (initialAuthToken) {
                     await signInWithCustomToken(auth, initialAuthToken);
                 } else {
@@ -655,7 +661,7 @@
                     }
                 });
 
-                // 3. Aggiungi i listener per l'editing (focus/blur) ai campi INPUT del form giornaliero
+                // 4. Aggiungi i listener per l'editing (focus/blur) ai campi INPUT del form giornaliero
                 document.querySelectorAll('.time-input').forEach(input => {
                     
                     input.addEventListener('focus', () => {
@@ -688,7 +694,7 @@
                     });
                 });
 
-                // 4. Aggiungi il listener per il pulsante Salva
+                // 5. Aggiungi il listener per il pulsante Salva
                 const saveButton = document.getElementById('saveButton');
                 if (saveButton) {
                     saveButton.addEventListener('click', saveDataToFirestore);
@@ -696,9 +702,10 @@
 
 
             } catch (e) {
-                // Questo catch ora gestirà errori non di configurazione (es. problemi di rete, permessi)
-                console.error("Errore di inizializzazione Firebase: ", e);
-                updateStatus('Errore critico di sistema. Controlla la console per i dettagli.', 'error');
+                // Questo catch ora gestirà errori di inizializzazione di Firebase
+                console.error("Errore di inizializzazione Firebase:", e);
+                // Diamo un messaggio più specifico all'utente
+                updateStatus(`Errore CRITICO all'avvio: ${e.message || 'Errore sconosciuto. Controlla la console.'}`, 'error');
             }
         }
 
