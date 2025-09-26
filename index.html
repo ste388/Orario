@@ -117,7 +117,7 @@
                 ? JSON.parse(__firebase_config) 
                 : null;
         } catch (e) {
-            console.error("ERRORE DI PARSING CRITICO: La configurazione Firebase non è un JSON valido.", e);
+            console.error("ERRORE DI PARSING CRITICO: La configurazione Firebase non è un JSON valido. Questo è probabilmente la causa del crash.", e);
             // La configurazione rimane null, verrà gestita in setupFirebaseAndLoadData per visualizzare l'errore
         }
 
@@ -618,11 +618,17 @@
             setLogLevel('debug');
 
             // 1. Verifica che la configurazione Firebase sia stata caricata e sia valida
-            if (!firebaseConfig || !firebaseConfig.apiKey) {
-                updateStatus('ERRORE CRITICO: La configurazione del database è assente o non valida (manca apiKey). Controlla la console per i dettagli specifici del parsing.', 'error');
-                console.error("ERRORE: Configurazione Firebase non disponibile o non valida. Configurazione attuale:", firebaseConfig);
+            if (!firebaseConfig) {
+                console.error("ERRORE DI CONFIGURAZIONE CRITICO: La variabile __firebase_config è assente o non è stata parsata correttamente. La configurazione non è disponibile.");
+                updateStatus('ERRORE CRITICO: Configurazione database non trovata. Impossibile avviare Firebase.', 'error');
                 return;
             }
+            if (!firebaseConfig.apiKey) {
+                 console.error("ERRORE DI CONFIGURAZIONE: Configurazione Firebase incompleta. Manca la chiave API (apiKey). Controlla la console per vedere la configurazione parziale.", firebaseConfig);
+                 updateStatus('ERRORE CRITICO: Configurazione database incompleta (manca apiKey).', 'error');
+                 return;
+            }
+
 
             try {
                 // Inizializzazione Firebase
