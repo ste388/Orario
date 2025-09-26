@@ -107,26 +107,17 @@
         import { getFirestore, doc, setDoc, onSnapshot, setLogLevel, getDocs, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // =========================================================================================
-        // CONFIGURAZIONE FIREBASE
+        // CONFIGURAZIONE FIREBASE (Usa variabili di ambiente Canvas)
         // =========================================================================================
-        const DEFAULT_FIREBASE_CONFIG = {
-            apiKey: "AIzaSyBLf5rM8ex0AxlkRM-bluadFgPejb4sLyo",
-            authDomain: "orari-95dbc.firebaseapp.com",
-            projectId: "orari-95dbc",
-            storageBucket: "orari-95dbc.firebasestorage.app",
-            messagingSenderId: "296312974735",
-            appId: "1:296312974735:web:9d8631f5296ee5c93f6ffa",
-            measurementId: "G-QB58E21SDQ"
-        };
         
-        // Costanti Firebase fornite dall'ambiente o predefinite
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-        
-        // Determina la configurazione Firebase da usare (sistema o predefinita)
+        // Determina la configurazione Firebase da usare, fornita dall'ambiente Canvas.
         const firebaseConfig = typeof __firebase_config !== 'undefined' 
             ? JSON.parse(__firebase_config) 
-            : DEFAULT_FIREBASE_CONFIG;
+            : null; 
+
+        // Costanti Firebase fornite dall'ambiente
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         
         let db, auth;
         let userId = null;
@@ -620,9 +611,10 @@
         async function setupFirebaseAndLoadData() {
             setLogLevel('debug');
 
-            if (firebaseConfig.apiKey === "YOUR_FIREBASE_CONFIG_OBJECT" || !firebaseConfig.apiKey) {
-                // Messaggio di errore aggiornato per l'ambiente esterno
-                updateStatus('ERRORE CRITICO: Configurazione Firebase mancante o incompleta! Inserisci le tue credenziali nel file.', 'error');
+            // Verifica che la configurazione Firebase sia stata fornita correttamente dall'ambiente
+            if (!firebaseConfig || !firebaseConfig.apiKey) {
+                updateStatus('ERRORE CRITICO: Configurazione Firebase non disponibile. Impossibile connettersi al database.', 'error');
+                console.error("ERRORE: La configurazione Firebase è assente o incompleta.");
                 return;
             }
 
@@ -704,6 +696,7 @@
 
 
             } catch (e) {
+                // Questo catch ora gestirà errori non di configurazione (es. problemi di rete, permessi)
                 console.error("Errore di inizializzazione Firebase: ", e);
                 updateStatus('Errore critico di sistema. Controlla la console per i dettagli.', 'error');
             }
