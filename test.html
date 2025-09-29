@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Timbrature Online</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Libreria SheetJS per l'esportazione in Excel (.xlsx) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    /* Stili Base */
+    body { font-family: Inter, sans-serif; background-color: #f0f4f8; min-height: 100vh; display: flex; justify-content: center; align-items: flex-start; padding: 2rem 1rem; }
+    
+    /* Layout della griglia settimanale L-V (5 colonne) */
+    #calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr); /* 5 colonne per L-V */
+        gap: 2px;
+    }
+
+    /* Stili per le celle giorno L-V (RIDIMENSIONATE PER MOBILE) */
+    .calendar-day { 
+        transition: all 0.15s ease-in-out; 
+        cursor: pointer; 
+        user-select: none; 
+        height: 65px; /* Altezza ridotta */
+        display: flex; 
+        flex-direction: column; 
+        align-items: center; 
+        justify-content: center; 
+        color: #374151; 
+        font-weight: 500; 
+        padding: 4px; /* Padding ridotto */
+        background-color: #f8fafc; /* Sfondo chiaro */
+        border: 1px solid #e2e8f0;
+    }
+    
+    /* Rimuove i bordi del giorno selezionato per non rovinare lo sfondo blu */
+    .calendar-day.selected { border: none !important; } 
+
+    .calendar-day:hover { background-color: #e0f2fe; transform: scale(1.02); }
+
+    /* Stili interni alla cella giorno (FONT RIDIMENSIONATI) */
+    .day-number { font-size: 0.85rem; font-weight: 600; } 
+    .day-name { font-size: 0.65rem; color: #6b7280; margin-bottom: 1px; } 
+    .total-hours { 
+        font-size: 0.75rem; /* Font più piccolo */
+        font-weight: 700; 
+        color: #059669; 
+        margin-top: 2px; 
+    }
+    
+    /* Selezionato (priorità massima) */
+    .calendar-day.selected { background-color: #3b82f6; color: white; border-radius: 0.375rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+    .calendar-day.selected .total-hours { color: #bfdbfe; }
+    .calendar-day.selected .day-name { color: #dbeafe; } /* Grigio chiaro per il nome del giorno */
+
+    /* STATI */
+    .calendar-day.status-partial { background-color: #fffbeb; border-color: #fef08a; } 
+    .calendar-day.status-partial .total-hours { color: #f59e0b; } 
+    
+    .calendar-day.status-complete { background-color: #f0fdf4; border-color: #bbf7d0; }
+    .calendar-day.status-complete .total-hours { color: #10b981; } 
+    
+    /* Input orario e bottone ora corrente */
+    .input-cell-wrapper { padding: 0; text-align: center; }
+    .time-input { width: 100%; padding: 0.5rem 0.25rem; text-align: center; border: none; background-color: transparent; font-size: 1rem; line-height: 1.25rem; border-radius: 0.375rem; outline: none; transition: background-color 0.2s, box-shadow 0.2s; }
+    .time-input:focus { background-color: #e0f2fe; box-shadow: 0 0 0 2px #93c5fd; }
+    .time-input.italic-placeholder { color: #9ca3af; font-style: italic; } 
+    
+  </style>
+</head>
+<body>
+<!-- Ridotto il padding su mobile (p-4) per recuperare spazio -->
+<div class="w-full max-w-4xl p-4 sm:p-6 bg-white shadow-2xl rounded-xl border border-blue-100">
+  <h1 class="text-3xl font-extrabold text-gray-800 mb-6 text-center border-b-2 pb-3 border-blue-200">Timbrature Online</h1>
+  <div id="status-message" class="text-center text-sm mb-4 p-2 rounded-lg bg-blue-50 text-blue-800">Inizializzazione del sistema...</div>
+  <div id="auth-status" class="text-center text-xs mb-4 p-2 rounded-lg bg-gray-100 text-gray-600 break-all" style="display: none;"></div>
+
+  <!-- Sezione Calendario Settimanale -->
+  <div class="mb-8 p-4 bg-blue-600 rounded-xl shadow-lg">
+    <div id="calendar-header" class="flex justify-between items-center mb-4 text-white">
+        <button id="prevWeek" class="p-2 rounded-full hover:bg-white/20 transition duration-150"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg></button>
+        <span class="text-xl font-semibold" id="week-display">Settimana Selezionata</span>
+        <button id="nextWeek" class="p-2 rounded-full hover:bg-white/20 transition duration-150"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg></button>
+    </div>
+    <div id="calendar-grid" class="grid grid-cols-5 gap-1 text-center">
+        <!-- Celle dei giorni (L-V) caricate da JS -->
+    </div>
+  </div>
+  
+  <!-- Sezione Form Orari -->
+  <div id="daily-schedule-form" class="p-6 border border-gray-200 rounded-xl bg-gray-50 shadow-inner">
+    <!-- Visualizzazione data semplificata (SENZA ANNO) -->
+    <h2 class="text-2xl font-bold text-gray-700 mb-4 text-center"><span id="selected-date-display" class="text-blue-600">Seleziona un giorno</span></h2>
+    
+    <!-- Tabella Input Orari -->
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-gray-300 border border-gray-200 rounded-lg">
+        <thead class="bg-blue-100/50">
+          <tr>
+            <th class="px-3 py-3 text-left text-sm font-medium text-gray-700 w-1/2">Campo Orario</th>
+            <th class="px-3 py-3 text-center text-sm font-medium text-gray-700 w-1/2">Valore (HH:MM)</th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          <!-- Entrata Mattina -->
+          <tr class="hover:bg-gray-50">
+            <td class="px-3 py-3 text-sm font-medium text-gray-900">Entrata Mattina</td>
+            <td class="input-cell-wrapper border-l border-r border-gray-200">
+                <div class="flex items-center gap-1 p-1">
+                    <input type="text" id="entrataMattina" class="time-input flex-grow" value="00:00">
+                    <button type="button" data-target="entrataMattina" class="set-time-btn p-2 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-150 shadow-sm" title="Imposta ora corrente">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </button>
+                </div>
+            </td>
+          </tr>
+          <!-- Uscita Pranzo -->
+          <tr class="hover:bg-gray-50">
+            <td class="px-3 py-3 text-sm font-medium text-gray-900">Uscita Pranzo</td>
+            <td class="input-cell-wrapper border-l border-r border-gray-200">
+                <div class="flex items-center gap-1 p-1">
+                    <input type="text" id="uscitaPranzo" class="time-input flex-grow" value="00:00">
+                    <button type="button" data-target="uscitaPranzo" class="set-time-btn p-2 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-150 shadow-sm" title="Imposta ora corrente">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </button>
+                </div>
+            </td>
+          </tr>
+          <!-- Entrata Pomeriggio -->
+          <tr class="hover:bg-gray-50">
+            <td class="px-3 py-3 text-sm font-medium text-gray-900">Entrata Pomeriggio</td>
+            <td class="input-cell-wrapper border-l border-r border-gray-200">
+                <div class="flex items-center gap-1 p-1">
+                    <input type="text" id="entrataPomeriggio" class="time-input flex-grow" value="00:00">
+                    <button type="button" data-target="entrataPomeriggio" class="set-time-btn p-2 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-150 shadow-sm" title="Imposta ora corrente">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </button>
+                </div>
+            </td>
+          </tr>
+          <!-- Uscita Sera -->
+          <tr class="hover:bg-gray-50">
+            <td class="px-3 py-3 text-sm font-medium text-gray-900">Uscita Sera</td>
+            <td class="input-cell-wrapper border-l border-r border-gray-200">
+                <div class="flex items-center gap-1 p-1">
+                    <input type="text" id="uscitaSera" class="time-input flex-grow" value="00:00">
+                    <button type="button" data-target="uscitaSera" class="set-time-btn p-2 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-150 shadow-sm" title="Imposta ora corrente">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </button>
+                </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    
+    <!-- Pulsante Salva -->
+    <div class="flex justify-center mt-6 mb-8"> 
+      <button id="saveButton" class="px-6 py-3 bg-green-600 text-white font-semibold rounded-lg shadow-xl hover:bg-green-700 transition duration-150 ease-in-out focus:outline-none focus:ring-4 focus:ring-green-500/50">
+        Salva orario
+      </button>
+    </div>
+
+    <!-- Sezione: Risultati Calcolati -->
+    <h3 class="text-xl font-bold text-gray-700 mt-6 mb-3 text-center border-t pt-4 border-gray-200">Risultati Calcolati</h3>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
+      
+      <!-- Pausa Pranzo Card -->
+      <div id="pausaPranzoCard" class="p-4 rounded-lg shadow-xl bg-white border transition duration-150 ease-in-out">
+        <div class="text-xs font-medium text-gray-500 mb-1">Durata Pausa Pranzo</div>
+        <div id="pausaPranzo" class="text-3xl font-extrabold text-gray-900">00:00</div>
+        <div id="pausaPranzoStatus" class="text-xs font-semibold mt-1 text-gray-600">Inserisci orari</div>
+      </div>
+      
+      <!-- Uscita Teorica Card (Aggiornata per mostrare sempre HH:MM) -->
+      <div class="p-4 rounded-lg shadow-xl bg-purple-100 border border-purple-300">
+        <div class="text-xs font-medium text-purple-700 mb-1">Uscita per 8 Ore (Teorica)</div>
+        <div id="uscitaTeorica" class="text-3xl font-extrabold text-purple-800">---</div>
+        <div class="text-xs font-semibold text-purple-700 mt-1" title="Uscita richiesta per totalizzare 8 ore di lavoro.">8:00h di lavoro richiesto</div>
+      </div>
+      
+      <!-- Totale Ore Lavorate Card -->
+      <div class="p-4 rounded-lg shadow-xl bg-green-100 border border-green-300">
+        <div class="text-xs font-medium text-green-700 mb-1">Totale Ore Lavorate</div>
+        <div id="totalHours" class="text-3xl font-extrabold text-green-800">00:00</div>
+        <div class="text-xs font-semibold text-green-700 mt-1">(Mattina + Pomeriggio)</div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Sezione: Esporta Dati -->
+  <div class="mt-8 p-6 border border-gray-200 rounded-xl bg-indigo-50 shadow-inner">
+    <h3 class="text-xl font-bold text-gray-700 mb-4 text-center">Esporta Storico Orari</h3>
+    <div class="flex flex-col sm:flex-row gap-4 items-center justify-center">
+      <div class="w-full sm:w-auto">
+        <label for="startDate" class="block text-sm font-medium text-gray-700">Data Inizio:</label>
+        <input type="date" id="startDate" class="mt-1 p-2 w-full border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
+      </div>
+      <div class="w-full sm:w-auto">
+        <label for="endDate" class="block text-sm font-medium text-gray-700">Data Fine:</label>
+        <input type="date" id="endDate" class="mt-1 p-2 w-full border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
+      </div>
+      <button id="exportButton" class="w-full sm:w-auto mt-6 sm:mt-4 px-6 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-xl hover:bg-indigo-700 transition duration-150 ease-in-out focus:outline-none focus:ring-4 focus:ring-indigo-500/50">
+        Esporta in Excel (.xlsx)
+      </button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  // =======================================================================
+  // CONFIGURAZIONE FIREBASE
+  // =======================================================================
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+  import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+  import { getFirestore, doc, getDoc, setDoc, collection, query, where, getDocs, onSnapshot, Timestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+  // MANDATORY: These variables are provided by the environment.
+  const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+  const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+  const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const auth = getAuth(app);
+
+  // =======================================================================
+  // STATO APPLICAZIONE
+  // =======================================================================
+  
+  let currentWeekStart = getStartOfWeek(new Date());
+  let selectedDate = new Date();
+  let dailyDataCache = {}; // Cache per i dati della settimana
+  let userId = null;
+  let unsubscribeWeeklyListener = null; // Funzione per annullare l'iscrizione al listener di Firestore
+
+  // Costanti
+  const TARGET_MINUTES = 480; // 8 ore
+  const MIN_BREAK = 60; // 1 ora
+  
+  const dayNamesFull = ["Domenica", "Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato"];
+  const dayNamesShort = ["LUN", "MAR", "MER", "GIO", "VEN"];
+  const monthNames = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
+
+  // =======================================================================
+  // UTILITY PER DATE E TEMPO (Invariate)
+  // =======================================================================
+
+  function getStartOfWeek(date) {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = (day === 0) ? 6 : (day - 1);
+    d.setDate(d.getDate() - diff);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  function formatDateId(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
+  function timeToMinutes(timeString) {
+    if (!timeString) return 0;
+    const digitsOnly = timeString.replace(/[^0-9]/g, '').padStart(4, '0').substring(0, 4);
+    if (digitsOnly === "0000") return 0;
+    const hours = parseInt(digitsOnly.substring(0, 2), 10);
+    const minutes = parseInt(digitsOnly.substring(2, 4), 10);
+    if (hours > 23 || minutes > 59) return 0; 
+    return hours * 60 + minutes;
+  }
+  
+  function minutesToHoursString(totalMinutes) {
+    if (totalMinutes < 0 || isNaN(totalMinutes)) return "0000";
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    const formattedHours = String(hours).padStart(2, "0");
+    const formattedMinutes = String(minutes).padStart(2, "0");
+    return formattedHours + formattedMinutes;
+  }
+  
+  function timeToDisplay(timeString) {
+    if (!timeString || timeString.length !== 4) return '00:00';
+    const hours = timeString.substring(0, 2);
+    const minutes = timeString.substring(2, 4);
+    return `${hours}:${minutes}`;
+  }
+  
+  function formatTimeInput(rawInput) {
+    let cleaned = rawInput.replace(/[^0-9]/g, '');
+    if (cleaned.length === 0) return '0000';
+    if (cleaned.length < 4) {
+        cleaned = cleaned.length <= 2 ? cleaned.padStart(2, '0') + '00' : cleaned.padStart(4, '0').substring(0, 4);
+    } else if (cleaned.length > 4) {
+        cleaned = cleaned.substring(0, 4);
+    }
+    let hours = Math.min(parseInt(cleaned.substring(0, 2), 10), 23);
+    let minutes = Math.min(parseInt(cleaned.substring(2, 4), 10), 59);
+    return String(hours).padStart(2, '0') + String(minutes).padStart(2, '0');
+  }
+
+  function getCurrentFormattedTime() {
+    const now = new Date();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+  }
+
+  // =======================================================================
+  // LOGICA CALCOLI (Invariata)
+  // =======================================================================
+
+  function calculateDurations(data) {
+    const mE1 = timeToMinutes(data.entrataMattina || ""); 
+    const mU1 = timeToMinutes(data.uscitaPranzo || ""); 
+    const mE2 = timeToMinutes(data.entrataPomeriggio || ""); 
+    const mU2 = timeToMinutes(data.uscitaSera || ""); 
+    const morningWorkMinutes = (mE1 > 0 && mU1 > mE1) ? (mU1 - mE1) : 0;
+    const afternoonWorkMinutes = (mE2 > 0 && mU2 > mE2) ? (mU2 - mE2) : 0;
+    const totalDuration = morningWorkMinutes + afternoonWorkMinutes;
+    let breakDuration = (mU1 > 0 && mE2 > mU1) ? (mE2 - mU1) : 0;
+    let theoreticalExitDisplay = '---';
+    if (mE1 > 0 && mU1 > mE1 && mE2 > mU1) {
+        const remainingWorkMinutes = Math.max(0, TARGET_MINUTES - morningWorkMinutes);
+        const theoreticalExitMinutes = mE2 + remainingWorkMinutes;
+        theoreticalExitDisplay = timeToDisplay(minutesToHoursString(theoreticalExitMinutes));
+    } else if (mE1 > 0) {
+        const theoreticalExitMinutes = mE1 + TARGET_MINUTES + MIN_BREAK;
+        theoreticalExitDisplay = timeToDisplay(minutesToHoursString(theoreticalExitMinutes));
+    }
+    return {
+        totalDurationMinutes: totalDuration,
+        totalHoursDisplay: timeToDisplay(minutesToHoursString(totalDuration)),
+        breakDurationDisplay: timeToDisplay(minutesToHoursString(breakDuration)),
+        breakDurationMinutes: breakDuration,
+        theoreticalExitDisplay: theoreticalExitDisplay 
+    };
+  }
+
+  function updateDailyCalculations() {
+    const inputValues = {
+        entrataMattina: document.getElementById("entrataMattina").value.trim(),
+        uscitaPranzo: document.getElementById("uscitaPranzo").value.trim(),
+        entrataPomeriggio: document.getElementById("entrataPomeriggio").value.trim(),
+        uscitaSera: document.getElementById("uscitaSera").value.trim(),
+    };
+    const results = calculateDurations(inputValues);
+    document.getElementById("totalHours").textContent = results.totalHoursDisplay;
+    const pausaPranzoDisplay = document.getElementById("pausaPranzo");
+    const pausaPranzoCard = document.getElementById("pausaPranzoCard");
+    const pausaPranzoStatus = document.getElementById("pausaPranzoStatus"); 
+    pausaPranzoDisplay.textContent = results.breakDurationDisplay; 
+    pausaPranzoCard.className = 'p-4 rounded-lg shadow-xl border transition duration-150 ease-in-out';
+    pausaPranzoDisplay.className = 'text-3xl font-extrabold';
+    pausaPranzoStatus.className = 'text-xs font-semibold mt-1';
+    if (results.breakDurationMinutes > 0 && results.breakDurationMinutes < MIN_BREAK) {
+        pausaPranzoCard.classList.add('bg-red-50', 'border-red-300');
+        pausaPranzoDisplay.classList.add('text-red-700');
+        pausaPranzoStatus.textContent = `ATTENZIONE: Inferiore a ${MIN_BREAK/60}:00h.`;
+        pausaPranzoStatus.classList.add('text-red-600');
+    } else if (results.breakDurationMinutes >= MIN_BREAK) {
+        pausaPranzoCard.classList.add('bg-blue-50', 'border-blue-300');
+        pausaPranzoDisplay.classList.add('text-blue-700');
+        pausaPranzoStatus.textContent = `Pausa valida (${MIN_BREAK/60}:00h richiesto).`;
+        pausaPranzoStatus.classList.add('text-blue-600');
+    } else {
+        pausaPranzoCard.classList.add('bg-white', 'border-gray-200');
+        pausaPranzoDisplay.classList.add('text-gray-900');
+        pausaPranzoStatus.textContent = `Nessun intervallo.`;
+        pausaPranzoStatus.classList.add('text-gray-600');
+    }
+    document.getElementById("uscitaTeorica").textContent = results.theoreticalExitDisplay;
+    if (selectedDate) {
+        const dateId = formatDateId(selectedDate);
+        const dayCell = document.querySelector(`.calendar-day[data-date="${dateId}"]`);
+        if (dayCell) {
+            updateDayCellStatus(dayCell, results.totalDurationMinutes, results.totalHoursDisplay);
+        }
+    }
+  }
+  
+  // =======================================================================
+  // PERSISTENZA (FIRESTORE) E UI
+  // =======================================================================
+  
+  function updateDayCellStatus(dayCell, totalMinutes, totalHoursDisplay) {
+        dayCell.classList.remove("status-partial", "status-complete");
+        const hoursSpan = dayCell.querySelector('.total-hours') || document.createElement('span');
+        hoursSpan.className = 'total-hours';
+        if (totalMinutes > 0) {
+            dayCell.classList.add(totalMinutes >= TARGET_MINUTES ? "status-complete" : "status-partial");
+            hoursSpan.textContent = totalHoursDisplay;
+            if (!dayCell.contains(hoursSpan)) dayCell.appendChild(hoursSpan);
+        } else {
+            if (dayCell.contains(hoursSpan)) dayCell.removeChild(hoursSpan);
+        }
+  }
+
+  function renderCalendar() {
+    document.getElementById("week-display").textContent = 
+        `${currentWeekStart.getDate()} ${monthNames[currentWeekStart.getMonth()].substring(0, 3)} - ${new Date(currentWeekStart.getTime() + 4 * 86400000).getDate()} ${monthNames[new Date(currentWeekStart.getTime() + 4 * 86400000).getMonth()].substring(0, 3)}`;
+    
+    const calendarGrid = document.getElementById("calendar-grid");
+    calendarGrid.innerHTML = "";
+
+    for(let i = 0; i < 5; i++) {
+        const date = new Date(currentWeekStart);
+        date.setDate(currentWeekStart.getDate() + i);
+        const dateId = formatDateId(date);
+        
+        const dayCell = document.createElement("div");
+        dayCell.className = "calendar-day rounded-md m-1";
+        dayCell.dataset.date = dateId;
+        dayCell.innerHTML = `<span class="day-name">${dayNamesShort[i]}</span><span class="day-number">${date.getDate()}</span>`;
+
+        const data = dailyDataCache[dateId];
+        if (data) {
+            const durations = calculateDurations(data); 
+            updateDayCellStatus(dayCell, durations.totalDurationMinutes, durations.totalHoursDisplay);
+        }
+        
+        if (dateId === formatDateId(selectedDate)) dayCell.classList.add("selected");
+        dayCell.onclick = () => selectDate(date);
+        calendarGrid.appendChild(dayCell);
+    }
+  }
+
+  function changeWeek(offset) {
+    currentWeekStart.setDate(currentWeekStart.getDate() + offset * 7);
+    selectedDate = new Date(currentWeekStart);
+    setupWeeklyListener();
+    loadFormFromCache();
+  }
+
+  function updateStatus(message, type = "info") {
+    const statusElement = document.getElementById("status-message");
+    statusElement.textContent = message;
+    statusElement.className = "text-center text-sm mb-4 p-2 rounded-lg";
+    const colors = {
+        success: ["bg-green-100", "text-green-800"],
+        error: ["bg-red-100", "text-red-800"],
+        info: ["bg-blue-100", "text-blue-800"]
+    };
+    statusElement.classList.add(...(colors[type] || colors.info));
+  }
+
+  function selectDate(date) {
+    const oldSelected = document.querySelector('.calendar-day.selected');
+    if (oldSelected) oldSelected.classList.remove('selected');
+
+    selectedDate = date;
+    const dateId = formatDateId(selectedDate);
+    const newSelected = document.querySelector(`.calendar-day[data-date="${dateId}"]`);
+    if (newSelected) newSelected.classList.add('selected');
+
+    const dayName = dayNamesFull[selectedDate.getDay()];
+    document.getElementById("selected-date-display").textContent =
+      `${dayName} ${selectedDate.getDate()} ${monthNames[selectedDate.getMonth()]}`;
+      
+    loadFormFromCache(); 
+  }
+  
+  function collectDailyData() {
+    return ["entrataMattina", "uscitaPranzo", "entrataPomeriggio", "uscitaSera"].reduce((data, field) => {
+        data[field] = formatTimeInput(document.getElementById(field).value.trim());
+        return data;
+    }, {});
+  }
+  
+  function loadFormFromCache() {
+    const dateId = formatDateId(selectedDate);
+    const dailyData = dailyDataCache[dateId] || {};
+
+    ["entrataMattina", "uscitaPranzo", "entrataPomeriggio", "uscitaSera"].forEach(field => {
+      const input = document.getElementById(field);
+      const storedHHMM = dailyData[field] || "0000";
+      input.value = timeToDisplay(storedHHMM);
+      input.classList.toggle('italic-placeholder', storedHHMM === "0000");
+    });
+
+    updateDailyCalculations();
+  }
+
+  function addInputListeners() {
+    document.querySelectorAll(".time-input").forEach(input => {
+      input.addEventListener("input", updateDailyCalculations);
+      input.addEventListener('focus', () => {
+        let currentValue = input.value.replace(/:/g, '');
+        if (currentValue === '0000') currentValue = '';
+        input.value = currentValue;
+        input.classList.remove('italic-placeholder');
+      });
+      input.addEventListener("blur", () => {
+        const standardizedHHMM = formatTimeInput(input.value);
+        input.value = timeToDisplay(standardizedHHMM);
+        input.classList.toggle('italic-placeholder', standardizedHHMM === '0000');
+        updateDailyCalculations();
+      });
+    });
+    document.getElementById("saveButton").onclick = saveDataToFirestore;
+  }
+
+  function attachSetTimeButtonListeners() {
+    document.querySelectorAll('.set-time-btn').forEach(button => {
+        button.addEventListener('click', () => {
+            const targetId = button.dataset.target; 
+            const inputField = document.getElementById(targetId);
+            const currentTime = getCurrentFormattedTime();
+            if (inputField) {
+                inputField.value = currentTime;
+                inputField.classList.remove('italic-placeholder');
+                inputField.dispatchEvent(new Event('blur'));
+                updateStatus(`Ora corrente (${currentTime}) impostata.`, "success");
+            }
+        });
+    });
+  }
+
+  async function saveDataToFirestore() {
+    if (!userId) {
+      updateStatus("Errore: Utente non autenticato. Impossibile salvare.", "error");
+      return;
+    }
+    const dateId = formatDateId(selectedDate);
+    const docRef = doc(db, "artifacts", appId, "users", userId, "schedules", dateId);
+    const dataToSave = collectDailyData();
+
+    updateStatus("Salvataggio online in corso...", "info");
+    try {
+      await setDoc(docRef, dataToSave, { merge: true });
+      updateStatus("Orario salvato online con successo!", "success");
+    } catch (e) {
+      console.error("Errore nel salvataggio su Firestore:", e);
+      updateStatus("Errore nel salvataggio online. Controlla la console.", "error");
+    }
+  }
+
+  function setupWeeklyListener() {
+    if (unsubscribeWeeklyListener) unsubscribeWeeklyListener(); // Annulla il listener precedente
+    if (!userId) return;
+
+    const endDate = new Date(currentWeekStart);
+    endDate.setDate(endDate.getDate() + 5);
+
+    const schedulesCol = collection(db, "artifacts", appId, "users", userId, "schedules");
+    const q = query(schedulesCol, 
+        where(document.id, '>=', formatDateId(currentWeekStart)),
+        where(document.id, '<', formatDateId(endDate))
+    );
+
+    unsubscribeWeeklyListener = onSnapshot(q, (querySnapshot) => {
+        dailyDataCache = {}; // Pulisci la cache della settimana
+        querySnapshot.forEach((doc) => {
+            dailyDataCache[doc.id] = doc.data();
+        });
+        renderCalendar(); // Ridisegna il calendario con i dati aggiornati
+        loadFormFromCache(); // Ricarica il form se il giorno selezionato è stato aggiornato
+    }, (error) => {
+        console.error("Errore listener Firestore:", error);
+        updateStatus("Errore di connessione al database.", "error");
+    });
+  }
+  
+  // =======================================================================
+  // ESPORTAZIONE EXCEL (Aggiornata per Firestore)
+  // =======================================================================
+
+  async function exportDataAsXLSX() {
+    if (!userId) {
+        updateStatus("Devi essere autenticato per esportare i dati.", "error");
+        return;
+    }
+    const startDateInput = document.getElementById("startDate").value;
+    const endDateInput = document.getElementById("endDate").value;
+    if (!startDateInput || !endDateInput || startDateInput > endDateInput) {
+        updateStatus("Seleziona un intervallo di date valido.", "error");
+        return;
+    }
+    
+    updateStatus("Preparazione dei dati per l'esportazione...", "info");
+
+    const schedulesCol = collection(db, "artifacts", appId, "users", userId, "schedules");
+    const q = query(schedulesCol, where(document.id, '>=', startDateInput), where(document.id, '<=', endDateInput));
+
+    try {
+        const querySnapshot = await getDocs(q);
+        const exportData = [];
+        querySnapshot.forEach((doc) => {
+            const data = doc.data();
+            const durations = calculateDurations(data);
+            exportData.push({
+                "Data": doc.id,
+                "Entrata Mattina": timeToDisplay(data.entrataMattina),
+                "Uscita Pranzo": timeToDisplay(data.uscitaPranzo),
+                "Entrata Pomeriggio": timeToDisplay(data.entrataPomeriggio),
+                "Uscita Sera": timeToDisplay(data.uscitaSera),
+                "Pausa Pranzo": durations.breakDurationDisplay,
+                "Totale Ore Lavorate": durations.totalHoursDisplay
+            });
+        });
+        
+        if (exportData.length === 0) {
+            updateStatus("Nessun dato trovato nell'intervallo selezionato.", "error");
+            return;
+        }
+
+        // Ordina i dati per data
+        exportData.sort((a, b) => a.Data.localeCompare(b.Data));
+
+        const worksheet = XLSX.utils.json_to_sheet(exportData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "RapportoOrari"); 
+        const filename = `orari_${startDateInput}_${endDateInput}.xlsx`;
+        XLSX.writeFile(workbook, filename);
+        updateStatus(`Esportazione completata! File "${filename}" generato.`, "success");
+
+    } catch(e) {
+        console.error("Errore durante l'esportazione da Firestore:", e);
+        updateStatus("Errore durante l'esportazione.", "error");
+    }
+  }
+
+  function initializeExportInputs() {
+      const today = new Date();
+      const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      document.getElementById('startDate').value = formatDateId(firstDayOfMonth);
+      document.getElementById('endDate').value = formatDateId(lastDayOfMonth);
+      document.getElementById("exportButton").onclick = exportDataAsXLSX;
+  }
+
+  // =======================================================================
+  // INIZIALIZZAZIONE
+  // =======================================================================
+
+  window.onload = function () {
+    updateStatus("Autenticazione in corso...", "info");
+
+    onAuthStateChanged(auth, async (user) => {
+        if (user) {
+            userId = user.uid;
+            const authStatusEl = document.getElementById("auth-status");
+            authStatusEl.innerHTML = `<strong>ID Utente:</strong> ${userId}`;
+            authStatusEl.style.display = 'block';
+            updateStatus("Connesso! I tuoi dati sono sincronizzati online.", "success");
+            
+            // Setup iniziale dell'applicazione dopo l'autenticazione
+            document.getElementById("prevWeek").onclick = () => changeWeek(-1);
+            document.getElementById("nextWeek").onclick = () => changeWeek(1);
+
+            let today = new Date();
+            if (today.getDay() === 0 || today.getDay() === 6) { // Sabato o Domenica
+                selectedDate = getStartOfWeek(today);
+            } else {
+                selectedDate = today;
+            }
+            currentWeekStart = getStartOfWeek(selectedDate);
+            
+            setupWeeklyListener(); // Attiva il listener per i dati in tempo reale
+            selectDate(selectedDate);
+            addInputListeners();
+            initializeExportInputs();
+            attachSetTimeButtonListeners();
+
+        } else {
+            updateStatus("Utente non autenticato. Riprova.", "error");
+            userId = null;
+        }
+    });
+
+    // Esegui l'autenticazione
+    (async () => {
+        try {
+            if (initialAuthToken) {
+                await signInWithCustomToken(auth, initialAuthToken);
+            } else {
+                await signInAnonymously(auth);
+            }
+        } catch (error) {
+            console.error("Authentication failed:", error);
+            updateStatus("Autenticazione fallita. Ricarica la pagina.", "error");
+        }
+    })();
+  };
+</script>
+
+</body>
+</html>
