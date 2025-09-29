@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Calendario Orario Giornaliero</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- SheetJS per export Excel -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <style>
+    /* Stili Base */
+    body {
+      font-family: Inter, sans-serif;
+      background-color: #f0f4f8;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 2rem 1rem;
+    }
+
+    .input-cell-wrapper {
+      padding: 0;
+      text-align: center;
+    }
+
+    .time-input {
+      width: 100%;
+      padding: 0.5rem 0.25rem;
+      text-align: center;
+      border: none;
+      background-color: transparent;
+      font-size: 1rem;
+      line-height: 1.25rem;
+      border-radius: 0.375rem;
+      outline: none;
+      transition: background-color 0.2s, box-shadow 0.2s;
+    }
+    .time-input:focus {
+      background-color: #e0f2fe;
+      box-shadow: 0 0 0 2px #93c5fd;
+    }
+    /* Placeholder corsivo gestito via classe */
+    .time-input.italic-placeholder {
+      color: #9ca3af;
+      font-style: italic;
+    }
+
+    /* Calendario: stati e selezione */
+    .calendar-day {
+      transition: all 0.15s ease-in-out;
+      cursor: pointer;
+      user-select: none;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 0.5rem;
+      border: 1px solid #e5e7eb;
+      background-color: #ffffff;
+    }
+    .calendar-day:hover {
+      background-color: #f3f4f6;
+    }
+    .calendar-day.selected {
+      outline: 2px solid #3b82f6;
+      outline-offset: 2px;
+      background-color: #eff6ff;
+    }
+    .calendar-day.status-partial {
+      background-color: #fff7ed;
+      border-color: #fdba74;
+    }
+    .calendar-day.status-complete {
+      background-color: #ecfdf5;
+      border-color: #6ee7b7;
+    }
+    .calendar-day.disabled {
+      color: #9ca3af;
+      background-color: #f9fafb;
+      cursor: default;
+    }
+
+    /* Cards info */
+    .info-card {
+      border: 1px solid #e5e7eb;
+      background-color: #ffffff;
+      border-radius: 0.75rem;
+      padding: 1rem;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+    .info-card.good {
+      border-color: #86efac;
+      background-color: #f0fdf4;
+    }
+    .info-card.warn {
+      border-color: #fde68a;
+      background-color: #fffbeb;
+    }
+    .info-card.bad {
+      border-color: #fca5a5;
+      background-color: #fef2f2;
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 0.125rem 0.5rem;
+      font-size: 0.75rem;
+      border-radius: 9999px;
+      border: 1px solid #e5e7eb;
+      background-color: #f9fafb;
+    }
+  </style>
+</head>
+<body>
+  <div class="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Colonna Sinistra: Calendario -->
+    <div class="lg:col-span-1">
+      <div class="bg-white rounded-xl shadow p-4">
+        <div class="flex items-center justify-between mb-3">
+          <button id="prevMonth" class="px-3 py-1.5 border rounded-md hover:bg-gray-50">&larr;</button>
+          <h2 id="monthLabel" class="text-lg font-medium">Mese Anno</h2>
+          <button id="nextMonth" class="px-3 py-1.5 border rounded-md hover:bg-gray-50">&rarr;</button>
+        </div>
+        <div class="grid grid-cols-7 gap-2 text-center text-xs text-gray-500 mb-2">
+          <div>Lu</div><div>Ma</div><div>Me</div><div>Gi</div><div>Ve</div><div>Sa</div><div>Do</div>
+        </div>
+        <div id="calendarGrid" class="grid grid-cols-7 gap-2"></div>
+        <div class="mt-3 flex items-center gap-2 text-xs text-gray-600">
+          <span class="status-badge">Vuoto</span>
+          <span class="status-badge" style="background:#fff7ed;border-color:#fdba74">Parziale</span>
+          <span class="status-badge" style="background:#ecfdf5;border-color:#6ee7b7">Completo</span>
+        </div>
+      </div>
+
+      <!-- Intervallo Export -->
+      <div class="bg-white rounded-xl shadow p-4 mt-6">
+        <h3 class="text-base font-medium mb-3">Esportazione intervallo</h3>
+        <div class="grid grid-cols-2 gap-3 mb-3">
+          <div>
+            <label class="block text-sm text-gray-600 mb-1" for="exportStart">Dal</label>
+            <input id="exportStart" type="date" class="w-full border rounded-md px-2 py-1.5" />
+          </div>
+          <div>
+            <label class="block text-sm text-gray-600 mb-1" for="exportEnd">Al</label>
+            <input id="exportEnd" type="date" class="w-full border rounded-md px-2 py-1.5" />
+          </div>
+        </div>
+        <button id="exportButton" class="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-md py-2">
+          Esporta in Excel
+        </button>
+        <div id="statusBar" class="text-sm mt-2 text-gray-600"></div>
+      </div>
+    </div>
+
+    <!-- Colonna Destra: Modulo Orari e Info -->
+    <div class="lg:col-span-2 space-y-6">
+      <div class="bg-white rounded-xl shadow p-4">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-base font-medium">Data selezionata</h3>
+          <div id="selectedDateLabel" class="text-sm text-gray-600">-</div>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div class="input-cell-wrapper">
+            <label class="block text-sm text-gray-600 mb-1" for="morningIn">Entrata Mattina</label>
+            <input id="morningIn" class="time-input italic-placeholder border rounded-md px-2 py-1.5" inputmode="numeric" placeholder="00:00" value="" />
+          </div>
+          <div class="input-cell-wrapper">
+            <label class="block text-sm text-gray-600 mb-1" for="lunchOut">Uscita Pranzo</label>
+            <input id="lunchOut" class="time-input italic-placeholder border rounded-md px-2 py-1.5" inputmode="numeric" placeholder="00:00" value="" />
+          </div>
+          <div class="input-cell-wrapper">
+            <label class="block text-sm text-gray-600 mb-1" for="afternoonIn">Entrata Pomeriggio</label>
+            <input id="afternoonIn" class="time-input italic-placeholder border rounded-md px-2 py-1.5" inputmode="numeric" placeholder="00:00" value="" />
+          </div>
+          <div class="input-cell-wrapper">
+            <label class="block text-sm text-gray-600 mb-1" for="eveningOut">Uscita Sera</label>
+            <input id="eveningOut" class="time-input italic-placeholder border rounded-md px-2 py-1.5" inputmode="numeric" placeholder="00:00" value="" />
+          </div>
+        </div>
+
+        <div class="mt-4 flex items-center gap-3">
+          <button id="saveButton" class="bg-emerald-600 hover:bg-emerald-700 text-white rounded-md px-4 py-2">
+            Salva Orario per Data
+          </button>
+          <button id="clearButton" class="bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-md px-4 py-2">
+            Svuota Campi
+          </button>
+        </div>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-4">
+        <div id="breakCard" class="info-card">
+          <div class="text-sm font-medium mb-1">Pausa Pranzo</div>
+          <div id="breakInfo" class="text-2xl font-semibold">--:--</div>
+          <div id="breakStatus" class="text-sm text-gray-600 mt-1">-</div>
+        </div>
+        <div id="expectedCard" class="info-card">
+          <div class="text-sm font-medium mb-1">Uscita Teorica</div>
+          <div id="expectedOut" class="text-2xl font-semibold">--:--</div>
+          <div id="expectedHint" class="text-sm text-gray-600 mt-1">-</div>
+        </div>
+        <div id="totalCard" class="info-card">
+          <div class="text-sm font-medium mb-1">Ore Totali</div>
+          <div id="totalWorked" class="text-2xl font-semibold">--:--</div>
+          <div id="totalHint" class="text-sm text-gray-600 mt-1">-</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* ======================
+       Costanti e Utility
+       ====================== */
+    const TARGET_MINUTES = 480; // 8h
+    const MIN_BREAK_MIN = 60;   // 60 min pausa minima
+
+    function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
+
+    function minutesToDisplay(mins) {
+      const m = Math.max(0, Math.floor(mins));
+      const H = String(Math.floor(m / 60)).padStart(2, "0");
+      const M = String(m % 60).padStart(2, "0");
+      return `${H}:${M}`;
+    }
+
+    // Per UI esistente: alias
+    function timeToDisplay(mins) { return minutesToDisplay(mins); }
+
+    // Converte "HHMM" -> minuti dalla mezzanotte, oppure null se vuoto/0000
+    function hhmmToMinutes(val) {
+      if (!val || typeof val !== "string") return null;
+      const s = val.replace(/\D/g, "");
+      if (s.length === 0) return null;
+      const padded = s.padStart(4, "0").slice(-4);
+      let hh = parseInt(padded.slice(0,2), 10);
+      let mm = parseInt(padded.slice(2,4), 10);
+      if (isNaN(hh) || isNaN(mm)) return null;
+      hh = clamp(hh, 0, 23);
+      mm = clamp(mm, 0, 59);
+      if (hh === 0 && mm === 0) return null;
+      return hh*60 + mm;
+    }
+
+    // Converte minuti -> "HHMM"
+    function minutesToHHMM(mins) {
+      if (mins == null) return "0000";
+      const H = String(clamp(Math.floor(mins/60), 0, 23)).padStart(2,"0");
+      const M = String(mins % 60).padStart(2,"0");
+      return `${H}${M}`;
+    }
+
+    // Per formattare i campi digitati "HHMM" in "HH:MM"
+    function toHHMM(hhmm) {
+      if (!hhmm || typeof hhmm !== "string" || hhmm.length !== 4) return "00:00";
+      return `${hhmm.slice(0,2)}:${hhmm.slice(2,4)}`;
+    }
+
+    function updateStatus(text, kind = "info") {
+      const el = document.getElementById("statusBar");
+      if (!el) return;
+      const colors = {
+        info: "text-gray-600",
+        success: "text-emerald-700",
+        warning: "text-amber-700",
+        error: "text-rose-700"
+      };
+      el.className = `text-sm mt-2 ${colors[kind] || colors.info}`;
+      el.textContent = text;
+    }
+
+    function formatDateKey(d) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `schedule-${y}-${m}-${day`;
+    }
+
+    function formatISODate(d) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
+    }
+
+    // Ritorna { startDate, endDate } dalle input date dell'export
+    function getDateRangeValues() {
+      const s = document.getElementById("exportStart").value;
+      const e = document.getElementById("exportEnd").value;
+      if (!s || !e) return { startDate: null, endDate: null };
+      const sd = new Date(s + "T00:00:00");
+      const ed = new Date(e + "T00:00:00");
+      return { startDate: sd, endDate: ed };
+    }
+
+    // Calcoli a partire dai "HHMM"
+    function calculateDurationsFromData({ morningIn, lunchOut, afternoonIn, eveningOut }) {
+      const t1 = hhmmToMinutes(morningIn);
+      const t2 = hhmmToMinutes(lunchOut);
+      const t3 = hhmmToMinutes(afternoonIn);
+      const t4 = hhmmToMinutes(eveningOut);
+
+      let breakMin = 0;
+      if (t2 != null && t3 != null && t3 > t2) breakMin = t3 - t2;
+
+      let workMin = 0;
+      if (t1 != null && t2 != null && t2 > t1) workMin += (t2 - t1);
+      if (t3 != null && t4 != null && t4 > t3) workMin += (t4 - t3);
+
+      // Uscita teorica per 8h considerando pausa minima
+      let expectedOut = null;
+      if (t1 != null) {
+        // ore necessarie rimanenti
+        const morningWork = (t2 != null && t2 > t1) ? (t2 - t1) : 0;
+        let needed = TARGET_MINUTES - morningWork;
+        if (needed < 0) needed = 0;
+
+        const minRientro = (t2 != null) ? (t2 + MIN_BREAK_MIN) : null;
+        // se c'è già un rientro inserito e valido, si usa quello come base, altrimenti minRientro
+        let baseStart = minRientro;
+        if (t3 != null) {
+          baseStart = (minRientro != null) ? Math.max(t3, minRientro) : t3;
+        }
+        if (baseStart != null) expectedOut = baseStart + needed;
+      }
+
+      return {
+        breakMinutes: breakMin,
+        workMinutes: workMin,
+        expectedOutMinutes: expectedOut,
+        morningInMinutes: t1,
+        lunchOutMinutes: t2,
+        afternoonInMinutes: t3,
+        eveningOutMinutes: t4
+      };
+    }
+
+    // Stato visivo card pausa
+    function renderBreakCard(min) {
+      const card = document.getElementById("breakCard");
+      const info = document.getElementById("breakInfo");
+      const st = document.getElementById("breakStatus");
+      info.textContent = min ? minutesToDisplay(min) : "--:--";
+      if (!min) {
+        card.classList.remove("good","warn","bad");
+        st.textContent = "Nessuna pausa calcolabile";
+        return;
+      }
+      if (min >= MIN_BREAK_MIN) {
+        card.classList.add("good"); card.classList.remove("warn","bad");
+        st.textContent = "Pausa valida";
+      } else {
+        card.classList.add("warn"); card.classList.remove("good","bad");
+        st.textContent = "Pausa inferiore al minimo";
+      }
+    }
+
+    // Uscita teorica
+    function renderExpectedOut(mins) {
+      const card = document.getElementById("expectedCard");
+      const out = document.getElementById("expectedOut");
+      const hint = document.getElementById("expectedHint");
+      if (mins == null) {
+        card.classList.remove("good","warn","bad");
+        out.textContent = "--:--";
+        hint.textContent = "Inserire almeno l'Entrata Mattina";
+        return;
+      }
+      out.textContent = minutesToDisplay(mins % (24*60));
+      card.classList.remove("warn","bad");
+      card.classList.add("good");
+      hint.textContent = "Stima per raggiungere 8h considerando pausa minima";
+    }
+
+    // Totale
+    function renderTotal(mins) {
+      const card = document.getElementById("totalCard");
+      const out = document.getElementById("totalWorked");
+      const hint = document.getElementById("totalHint");
+      out.textContent = minutesToDisplay(mins || 0);
+      card.classList.remove("warn","bad");
+      card.classList.add("good");
+      hint.textContent = "Somma ore mattina e pomeriggio";
+    }
+
+    // Gestione input HH:MM rapido
+    function attachTimeInputBehavior(id) {
+      const el = document.getElementById(id);
+      const toPlain = (s) => s.replace(/\D/g, "");
+      const applyStyle = () => {
+        el.classList.toggle("italic-placeholder", !el.value);
+        if (!el.value) el.placeholder = "00:00";
+      };
+      el.addEventListener("focus", () => {
+        const s = el.value.replace(":", "");
+        el.value = s === "0000" ? "" : s;
+      });
+      el.addEventListener("blur", () => {
+        let s = toPlain(el.value);
+        if (!s) { el.value = ""; applyStyle(); onAnyTimeChange(); return; }
+        s = s.padStart(4,"0").slice(-4);
+        const hh = clamp(parseInt(s.slice(0,2),10)||0,0,23);
+        const mm = clamp(parseInt(s.slice(2,4),10)||0,0,59);
+        el.value = `${String(hh).padStart(2,"0")}:${String(mm).padStart(2,"0")}`;
+        applyStyle();
+        onAnyTimeChange();
+      });
+      el.addEventListener("input", () => {
+        el.classList.remove("italic-placeholder");
+      });
+      applyStyle();
+    }
+
+    function getCurrentDate() { return currentSelectedDate; }
+    function setSelectedDate(d) {
+      currentSelectedDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      document.getElementById("selectedDateLabel").textContent = formatISODate(currentSelectedDate);
+      loadDayFromStorage();
+      paintCalendar();
+      onAnyTimeChange();
+    }
+
+    function setTimeInputsFromHHMM({ morningIn, lunchOut, afternoonIn, eveningOut }) {
+      const setVal = (el, hhmm) => {
+        el.value = hhmm && hhmm !== "0000" ? toHHMM(hhmm) : "";
+        el.classList.toggle("italic-placeholder", !el.value);
+      };
+      setVal(document.getElementById("morningIn"), morningIn);
+      setVal(document.getElementById("lunchOut"), lunchOut);
+      setVal(document.getElementById("afternoonIn"), afternoonIn);
+      setVal(document.getElementById("eveningOut"), eveningOut);
+    }
+
+    function readTimeInputsAsHHMM() {
+      const read = (id) => {
+        const v = document.getElementById(id).value;
+        if (!v) return "0000";
+        const d = v.replace(/\D/g,"").padStart(4,"0").slice(-4);
+        const hh = clamp(parseInt(d.slice(0,2),10)||0,0,23);
+        const mm = clamp(parseInt(d.slice(2,4),10)||0,0,59);
+        return `${String(hh).padStart(2,"0")}${String(mm).padStart(2,"0")}`;
+      };
+      return {
+        morningIn: read("morningIn"),
+        lunchOut: read("lunchOut"),
+        afternoonIn: read("afternoonIn"),
+        eveningOut: read("eveningOut")
+      };
+    }
+
+    function isCompleteDay(d) {
+      return d.morningIn !== "0000" && d.lunchOut !== "0000" && d.afternoonIn !== "0000" && d.eveningOut !== "0000";
+    }
+
+    function isPartialDay(d) {
+      return d.morningIn !== "0000" || d.lunchOut !== "0000" || d.afternoonIn !== "0000" || d.eveningOut !== "0000";
+    }
+
+    function saveDayToStorage() {
+      const date = getCurrentDate();
+      const key = `schedule-${formatISODate(date)}`;
+      const data = readTimeInputsAsHHMM();
+      localStorage.setItem(key, JSON.stringify(data));
+      paintCalendar();
+      updateStatus("Orario salvato per la data selezionata.", "success");
+    }
+
+    function clearInputs() {
+      setTimeInputsFromHHMM({ morningIn:"0000", lunchOut:"0000", afternoonIn:"0000", eveningOut:"0000" });
+      updateStatus("Campi svuotati.", "info");
+      onAnyTimeChange();
+    }
+
+    function loadDayFromStorage() {
+      const date = getCurrentDate();
+      const key = `schedule-${formatISODate(date)}`;
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        try {
+          const obj = JSON.parse(raw);
+          setTimeInputsFromHHMM({
+            morningIn: obj.morningIn || "0000",
+            lunchOut: obj.lunchOut || "0000",
+            afternoonIn: obj.afternoonIn || "0000",
+            eveningOut: obj.eveningOut || "0000"
+          });
+          return;
+        } catch(_) {}
+      }
+      setTimeInputsFromHHMM({ morningIn:"0000", lunchOut:"0000", afternoonIn:"0000", eveningOut:"0000" });
+    }
+
+    function onAnyTimeChange() {
+      const data = readTimeInputsAsHHMM();
+      const calc = calculateDurationsFromData(data);
+      renderBreakCard(calc.breakMinutes);
+      renderExpectedOut(calc.expectedOutMinutes);
+      renderTotal(calc.workMinutes);
+    }
+
+    /* ======================
+       Calendario Mensile
+       ====================== */
+    let currentMonth = new Date();
+    currentMonth.setDate(1);
+    let currentSelectedDate = new Date();
+
+    function paintCalendar() {
+      const grid = document.getElementById("calendarGrid");
+      const label = document.getElementById("monthLabel");
+      grid.innerHTML = "";
+
+      const year = currentMonth.getFullYear();
+      const month = currentMonth.getMonth();
+
+      const formatter = new Intl.DateTimeFormat("it-IT", { month: "long", year: "numeric" });
+      label.textContent = formatter.format(currentMonth);
+
+      const firstDay = new Date(year, month, 1);
+      const startWeekday = (firstDay.getDay() + 6) % 7; // lun=0 ... dom=6
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+      // Precarica stati giorni del mese
+      const dayStates = {};
+      for (let d = 1; d <= daysInMonth; d++) {
+        const key = `schedule-${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+        const raw = localStorage.getItem(key);
+        if (!raw) continue;
+        try {
+          const obj = JSON.parse(raw);
+          if (isCompleteDay(obj)) dayStates[d] = "complete";
+          else if (isPartialDay(obj)) dayStates[d] = "partial";
+        } catch(_) {}
+      }
+
+      // Celle vuote prima del mese
+      for (let i = 0; i < startWeekday; i++) {
+        const cell = document.createElement("div");
+        cell.className = "calendar-day disabled";
+        cell.textContent = "";
+        grid.appendChild(cell);
+      }
+
+      // Giorni
+      for (let d = 1; d <= daysInMonth; d++) {
+        const cell = document.createElement("div");
+        cell.className = "calendar-day";
+        cell.textContent = String(d);
+        if (dayStates[d] === "partial") cell.classList.add("status-partial");
+        if (dayStates[d] === "complete") cell.classList.add("status-complete");
+
+        const isSelected = currentSelectedDate.getFullYear() === year &&
+                           currentSelectedDate.getMonth() === month &&
+                           currentSelectedDate.getDate() === d;
+        if (isSelected) cell.classList.add("selected");
+
+        cell.addEventListener("click", () => {
+          const newDate = new Date(year, month, d);
+          setSelectedDate(newDate);
+        });
+
+        grid.appendChild(cell);
+      }
+    }
+
+    /* ======================
+       Export Excel (.xlsx)
+       ====================== */
+    function exportDataAsXLSX() {
+      try {
+        updateStatus("Preparazione esportazione Excel...", "info");
+
+        const { startDate, endDate } = getDateRangeValues();
+        if (!startDate || !endDate || startDate > endDate) {
+          updateStatus("Intervallo date non valido.", "error");
+          return;
+        }
+
+        const header = [
+          "Data",
+          "Entrata Mattina",
+          "Uscita Pranzo",
+          "Entrata Pomeriggio",
+          "Uscita Sera",
+          "Pausa",
+          "Totale"
+        ];
+        const rows = [header];
+
+        const cursor = new Date(startDate);
+        while (cursor <= endDate) {
+          const y = cursor.getFullYear();
+          const m = String(cursor.getMonth() + 1).padStart(2, "0");
+          const d = String(cursor.getDate()).padStart(2, "0");
+          const key = `schedule-${y}-${m}-${d}`;
+
+          const raw = localStorage.getItem(key);
+          let E1="0000", U1="0000", E2="0000", U2="0000";
+          if (raw) {
+            try {
+              const obj = JSON.parse(raw);
+              E1 = obj.morningIn || "0000";
+              U1 = obj.lunchOut || "0000";
+              E2 = obj.afternoonIn || "0000";
+              U2 = obj.eveningOut || "0000";
+            } catch(_) {}
+          }
+
+          const calc = calculateDurationsFromData({
+            morningIn: E1, lunchOut: U1, afternoonIn: E2, eveningOut: U2
+          });
+          const pausa = timeToDisplay(calc.breakMinutes || 0);
+          const totale = timeToDisplay(calc.workMinutes || 0);
+
+          const row = [
+            `${y}-${m}-${d}`,
+            toHHMM(E1),
+            toHHMM(U1),
+            toHHMM(E2),
+            toHHMM(U2),
+            pausa,
+            totale
+          ];
+          rows.push(row);
+
+          cursor.setDate(cursor.getDate() + 1);
+        }
+
+        if (rows.length === 1) {
+          updateStatus("Nessun dato nell'intervallo selezionato.", "warning");
+          return;
+        }
+
+        const ws = XLSX.utils.aoa_to_sheet(rows);
+        ws["!cols"] = [
+          { wch: 12 },
+          { wch: 16 },
+          { wch: 15 },
+          { wch: 18 },
+          { wch: 14 },
+          { wch: 10 },
+          { wch: 10 }
+        ];
+        // Imposta i valori HH:MM come stringa per evitare auto-conversioni Excel
+        const hhmmCols = ["B","C","D","E","F","G"];
+        for (let r = 2; r <= rows.length; r++) {
+          for (const c of hhmmCols) {
+            const addr = `${c}${r}`;
+            const cell = ws[addr];
+            if (cell && typeof cell.v === "string" && /^\d{2}:\d{2}$/.test(cell.v)) {
+              cell.t = "s";
+            }
+          }
+        }
+
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Orari");
+        const name = `orari_${formatISODate(startDate)}_a_${formatISODate(endDate)}.xlsx`;
+        XLSX.writeFile(wb, name);
+
+        updateStatus("Esportazione Excel completata.", "success");
+      } catch (err) {
+        console.error(err);
+        updateStatus("Errore durante l'esportazione Excel.", "error");
+      }
+    }
+
+    /* ======================
+       Init e Event Listeners
+       ====================== */
+    document.addEventListener("DOMContentLoaded", () => {
+      // Inizializza input orari
+      ["morningIn","lunchOut","afternoonIn","eveningOut"].forEach(attachTimeInputBehavior);
+
+      // Navigazione mese
+      document.getElementById("prevMonth").addEventListener("click", () => {
+        currentMonth.setMonth(currentMonth.getMonth() - 1);
+        paintCalendar();
+      });
+      document.getElementById("nextMonth").addEventListener("click", () => {
+        currentMonth.setMonth(currentMonth.getMonth() + 1);
+        paintCalendar();
+      });
+
+      // Pulsanti azione
+      document.getElementById("saveButton").addEventListener("click", saveDayToStorage);
+      document.getElementById("clearButton").addEventListener("click", clearInputs);
+
+      // Esporta in Excel
+      const exportBtn = document.getElementById("exportButton");
+      if (exportBtn) {
+        exportBtn.textContent = "Esporta in Excel";
+        exportBtn.addEventListener("click", exportDataAsXLSX);
+      }
+
+      // Preimposta intervallo export sul mese corrente
+      const start = new Date();
+      start.setDate(1);
+      const end = new Date(start.getFullYear(), start.getMonth() + 1, 0);
+      document.getElementById("exportStart").value = formatISODate(start);
+      document.getElementById("exportEnd").value = formatISODate(end);
+
+      // Seleziona oggi e dipinge
+      setSelectedDate(new Date());
+      paintCalendar();
+    });
+  </script>
+</body>
+</html>
