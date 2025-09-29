@@ -76,6 +76,7 @@
 </head>
 <body>
 <div class="w-full max-w-4xl p-6 bg-white shadow-2xl rounded-xl border border-blue-100">
+  <!-- CAMBIATO: Titolo principale aggiornato a "Timbrature" -->
   <h1 class="text-3xl font-extrabold text-gray-800 mb-6 text-center border-b-2 pb-3 border-blue-200">Timbrature</h1>
   <div id="status-message" class="text-center text-sm mb-4 p-2 rounded-lg bg-blue-50 text-blue-800">Inizializzazione del sistema...</div>
   
@@ -87,7 +88,8 @@
   
   <!-- Sezione Form Orari -->
   <div id="daily-schedule-form" class="p-6 border border-gray-200 rounded-xl bg-gray-50 shadow-inner">
-    <h2 class="text-2xl font-bold text-gray-700 mb-4 text-center">Orario per <span id="selected-date-display" class="text-blue-600">Oggi</span></h2>
+    <!-- CAMBIATO: Rimosso "Orario per" e non viene più visualizzato l'anno (gestito in JS) -->
+    <h2 class="text-2xl font-bold text-gray-700 mb-4 text-center"><span id="selected-date-display" class="text-blue-600">Oggi</span></h2>
     
     <!-- Tabella Input Orari -->
     <div class="overflow-x-auto">
@@ -218,6 +220,11 @@
   // Costanti per i calcoli
   const TARGET_MINUTES = 480; // 8 ore (8 * 60)
   const MIN_BREAK = 60; // Pausa minima 1:00h
+  
+  // Nomi dei giorni e dei mesi
+  const dayNames = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
+  const monthNames = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
+
 
   // =======================================================================
   // UTILITY PER DATE E TEMPO
@@ -434,6 +441,7 @@
     document.getElementById("nextMonth").onclick = () => { currentCalendarDate.setMonth(currentCalendarDate.getMonth() + 1); renderCalendar(); loadMonthStatuses(); };
 
     calendarGrid.innerHTML = "";
+    // Visualizza i nomi dei giorni (Lun, Mar, ...)
     dayNames.forEach(day => {
       const cell = document.createElement("div");
       cell.className = "text-center text-xs font-semibold text-gray-400 py-2";
@@ -445,6 +453,10 @@
     const month = currentCalendarDate.getMonth();
     const firstDayOfMonth = new Date(year, month, 1);
     const daysInMonth = new Date(year, month + 1, 0).getDate();
+    
+    // Calcola l'offset per iniziare il mese nel giorno corretto della settimana (0 = Lunedì)
+    // firstDayOfMonth.getDay() restituisce: 0 (Domenica), 1 (Lunedì), ..., 6 (Sabato)
+    // La formula (giorno + 6) % 7 mappa Lunedì a 0, Martedì a 1, ..., Domenica a 6
     const startDayIndex = (firstDayOfMonth.getDay() + 6) % 7; 
 
     for(let i = 0; i < startDayIndex; i++) {
@@ -507,11 +519,13 @@
         newSelected.classList.add('selected');
     }
 
+    // CAMBIATO: Visualizzazione della data semplificata (senza "Orario per" e senza anno)
+    const dayOfWeekIndex = (selectedDate.getDay() + 6) % 7;
     document.getElementById("selected-date-display").textContent =
-      dayNames[selectedDate.getDay()] + " " +
+      dayNames[dayOfWeekIndex] + " " +
       selectedDate.getDate() + " " +
-      monthNames[selectedDate.getMonth()] + " " +
-      selectedDate.getFullYear();
+      monthNames[selectedDate.getMonth()];
+      
     loadFormFromLocalStorage(); 
   }
 
@@ -805,9 +819,6 @@
   }
 
 
-  const dayNames = ["Dom", "Lun", "Mar", "Mer", "Gio", "Ven", "Sab"];
-  const monthNames = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
-  
   window.onload = function () {
     updateStatus("Applicazione inizializzata. Dati salvati in Local Storage.");
     renderCalendar();
