@@ -11,17 +11,13 @@
     .input-cell-wrapper { padding: 0; text-align: center; }
     .time-input { width: 100%; padding: 0.5rem 0.25rem; text-align: center; border: none; background-color: transparent; font-size: 1rem; line-height: 1.25rem; border-radius: 0.375rem; outline: none; transition: background-color 0.2s, box-shadow 0.2s; }
     .time-input:focus { background-color: #e0f2fe; box-shadow: 0 0 0 2px #93c5fd; }
-    
     /* Stile per il placeholder (quando il valore è 0000) - Usiamo una classe per il controllo JS */
     .time-input.italic-placeholder { color: #9ca3af; font-style: italic; } 
-    
     /* Stili Calendario AGGIORNATI per status */
     .calendar-day { transition: all 0.15s ease-in-out; cursor: pointer; user-select: none; height: 48px; display: flex; align-items: center; justify-content: center; color: #374151; font-weight: 500; }
     .calendar-day:hover { background-color: #e0f2fe; transform: scale(1.05);}
-    
     /* Selezionato (priorità massima) */
     .calendar-day.selected { background-color: #3b82f6; color: white; font-weight: bold; border-radius: 0.375rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
-
     /* STATI AGGIUNTI PER IL REQUISITO UTENTE */
     .calendar-day.status-partial { 
         background-color: #fde68a; /* Giallo 200 */
@@ -39,7 +35,6 @@
         background-color: #3b82f6; 
         color: white;
     }
-
   </style>
 </head>
 <body>
@@ -113,9 +108,18 @@
       </div>
     </div>
 
-    <div class="flex justify-center mt-8">
+    <div class="flex justify-center mt-8 space-x-4">
       <button id="saveButton" class="px-6 py-3 bg-green-600 text-white font-semibold rounded-lg shadow-xl hover:bg-green-700 transition duration-150 ease-in-out focus:outline-none focus:ring-4 focus:ring-green-500/50">
         Salva Orario per questa Data
+      </button>
+
+      <!-- Aggiunta pulsanti per esportazione -->
+      <label for="exportStartDate" class="font-semibold self-center">Da:</label>
+      <input type="date" id="exportStartDate" class="px-3 py-2 border border-gray-300 rounded-md" />
+      <label for="exportEndDate" class="font-semibold self-center">A:</label>
+      <input type="date" id="exportEndDate" class="px-3 py-2 border border-gray-300 rounded-md" />
+      <button id="exportDataBtn" class="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-xl hover:bg-blue-700 transition duration-150 ease-in-out focus:outline-none focus:ring-4 focus:ring-blue-500/50">
+        Esporta Dati
       </button>
     </div>
   </div>
@@ -229,13 +233,11 @@
     return String(hours).padStart(2, '0') + String(minutes).padStart(2, '0');
   }
 
-
   // =======================================================================
   // LOGICA CALCOLI
   // =======================================================================
 
   function updateDailyCalculations() {
-    // L'input.value è ora nel formato HH:MM (es. '09:00'), ma timeToMinutes lo gestisce.
     const tstartm = document.getElementById("entrataMattina").value.trim();
     const tendm = document.getElementById("uscitaPranzo").value.trim();
     const tstartp = document.getElementById("entrataPomeriggio").value.trim();
@@ -247,7 +249,6 @@
     const mstartp = timeToMinutes(tstartp);
     const mendp = timeToMinutes(tendp);
 
-    // Durate
     const morningDuration = Math.max(0, mendm - mstartm);
     const afternoonDuration = Math.max(0, mendp - mstartp);
     let breakDuration = 0; 
@@ -258,19 +259,16 @@
 
     const totalDuration = morningDuration + afternoonDuration;
     
-    // 1. Totale Ore Lavorate
     const totalHoursHHMM = minutesToHoursString(totalDuration);
     document.getElementById("totalHours").textContent = timeToDisplay(totalHoursHHMM);
     
-    // 2. Pausa Pranzo e Styling (Card)
     const pausaPranzoDisplay = document.getElementById("pausaPranzo");
-    const pausaPranzoCard = document.getElementById("pausaPranzoCard"); // Contenitore Card
-    const pausaPranzoStatus = document.getElementById("pausaPranzoStatus"); // Messaggio di stato
+    const pausaPranzoCard = document.getElementById("pausaPranzoCard");
+    const pausaPranzoStatus = document.getElementById("pausaPranzoStatus");
 
     const breakDurationHHMM = minutesToHoursString(breakDuration);
     pausaPranzoDisplay.textContent = timeToDisplay(breakDurationHHMM); 
 
-    // Reset classi sulla card container
     pausaPranzoCard.classList.remove('bg-red-50', 'bg-blue-50', 'border-red-300', 'border-blue-300', 'border-gray-200');
     pausaPranzoDisplay.classList.remove('text-red-700', 'text-blue-700');
     pausaPranzoStatus.classList.remove('text-red-600', 'text-blue-600');
@@ -278,7 +276,6 @@
     pausaPranzoStatus.classList.add('text-gray-600');
 
     if (breakDuration > 0 && breakDuration < MIN_BREAK) {
-        // Pausa troppo breve (Rosso)
         pausaPranzoCard.classList.add('bg-red-50', 'border-red-300');
         pausaPranzoDisplay.classList.add('text-red-700');
         pausaPranzoDisplay.classList.remove('text-gray-900');
@@ -286,7 +283,6 @@
         pausaPranzoStatus.classList.add('text-red-600');
         pausaPranzoStatus.classList.remove('text-gray-600');
     } else if (breakDuration >= MIN_BREAK) {
-        // Pausa valida (Blu)
         pausaPranzoCard.classList.add('bg-blue-50', 'border-blue-300');
         pausaPranzoDisplay.classList.add('text-blue-700');
         pausaPranzoDisplay.classList.remove('text-gray-900');
@@ -294,12 +290,10 @@
         pausaPranzoStatus.classList.add('text-blue-600');
         pausaPranzoStatus.classList.remove('text-gray-600');
     } else {
-        // Nessun intervallo (Bianco/Grigio Default)
         pausaPranzoCard.classList.add('bg-white', 'border-gray-200');
         pausaPranzoStatus.textContent = `Nessun intervallo registrato.`;
     }
 
-    // 3. Uscita Teorica per ${TARGET_MINUTES/60} ore
     const minutesNeededAfternoon = TARGET_MINUTES - morningDuration;
     let theoreticalExitDisplay = '00:00'; 
     
@@ -307,20 +301,15 @@
         if (minutesNeededAfternoon <= 0) {
             theoreticalExitDisplay = 'Raggiunte';
         } else {
-            // Orario minimo di rientro (Uscita Pranzo + 60 min)
             const m_min_start_p = mendm + MIN_BREAK; 
             let m_theoretical_start_p = m_min_start_p;
 
-            // Se l'utente ha inserito l'entrata pomeridiana (mstartp > 0), usiamo il max tra il suo input 
-            // e l'orario minimo di rientro per garantire la pausa minima.
             if (mstartp > 0) {
                 m_theoretical_start_p = Math.max(mstartp, m_min_start_p);
             } else {
-                // Altrimenti, per il calcolo teorico, assumiamo che l'Entrata Pomeriggio sia dopo la pausa minima.
                 m_theoretical_start_p = m_min_start_p;
             }
             
-            // Calcola l'uscita aggiungendo i minuti necessari
             const theoreticalExitMinutes = m_theoretical_start_p + minutesNeededAfternoon;
             
             if (theoreticalExitMinutes < (24 * 60)) {
@@ -341,7 +330,6 @@
   // PERSISTENZA (LOCAL STORAGE) E UI
   // =======================================================================
 
-  // Funzioni UI/Calendario
   const dayNames = ["Dom", "Lun", "Mar", "Mer", "Gio", "Ven", "Sab"];
   const monthNames = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
   
@@ -385,7 +373,6 @@
       dayCell.textContent = day;
       dayCell.dataset.date = dateId;
 
-      // APPLICAZIONE DEGLI STILI BASATI SULLO STATO (dopo loadMonthStatuses)
       if (dailyStatuses[dateId] === 'complete') dayCell.classList.add("status-complete");
       else if (dailyStatuses[dateId] === 'partial') dayCell.classList.add("status-partial");
       
@@ -406,20 +393,13 @@
   }
 
   function selectDate(date) {
-    // Rimuovi la classe 'selected' dalla data precedentemente selezionata, se esiste
     const oldSelected = document.querySelector('.calendar-day.selected');
-    if (oldSelected) {
-        oldSelected.classList.remove('selected');
-    }
+    if (oldSelected) oldSelected.classList.remove('selected');
 
     selectedDate = date;
-    
-    // Aggiungi la classe 'selected' alla nuova data
     const dateId = formatDateId(selectedDate);
     const newSelected = document.querySelector(`.calendar-day[data-date="${dateId}"]`);
-    if (newSelected) {
-        newSelected.classList.add('selected');
-    }
+    if (newSelected) newSelected.classList.add('selected');
 
     document.getElementById("selected-date-display").textContent =
       dayNames[selectedDate.getDay()] + " " +
@@ -429,9 +409,6 @@
     loadFormFromLocalStorage(); 
   }
 
-  /**
-   * Carica tutti i dati del mese corrente dal Local Storage e aggiorna gli stati.
-   */
   function loadMonthStatuses() {
     dailyStatuses = {};
     const currentYear = currentCalendarDate.getFullYear();
@@ -439,173 +416,142 @@
     const currentMonthPrefix = LOCAL_STORAGE_PREFIX + currentYear + "-" + currentMonth;
 
     try {
-        // Scorre tutte le chiavi in localStorage
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            
-            // Filtra solo le chiavi di orario per il mese corrente
-            if (key && key.startsWith(currentMonthPrefix)) {
-                const dateId = key.substring(LOCAL_STORAGE_PREFIX.length);
-                const dataString = localStorage.getItem(key);
-                let data = {};
-                
-                try {
-                    data = JSON.parse(dataString);
-                } catch (e) {
-                    console.error("Errore di parsing JSON per la chiave:", key, e);
-                    continue;
-                }
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith(currentMonthPrefix)) {
+          const dateId = key.substring(LOCAL_STORAGE_PREFIX.length);
+          const dataString = localStorage.getItem(key);
+          let data = {};
+          try { data = JSON.parse(dataString); } catch (e) { console.error("Errore parsing JSON per", key, e); continue; }
 
-                let filled = 0;
-                // Controlliamo se i 4 campi orari hanno un valore diverso da "0000"
-                ["entrataMattina", "uscitaPranzo", "entrataPomeriggio", "uscitaSera"].forEach(f => {
-                    if (data[f] && data[f] !== "0000") filled++;
-                });
-
-                // Determina lo stato e lo memorizza
-                dailyStatuses[dateId] =
-                    filled === 4 ? 'complete' : (filled > 0 ? 'partial' : 'empty');
-            }
+          let filled = 0;
+          ["entrataMattina", "uscitaPranzo", "entrataPomeriggio", "uscitaSera"].forEach(f => {
+            if (data[f] && data[f] !== "0000") filled++;
+          });
+          dailyStatuses[dateId] = filled === 4 ? 'complete' : (filled > 0 ? 'partial' : 'empty');
         }
+      }
     } catch (e) {
-      console.error("Error loading month statuses from Local Storage:", e);
+      console.error("Errore nel caricamento stati mese:", e);
     }
     renderCalendar();
   }
   
-  /**
-   * Raccoglie i dati, convertendoli dal formato display (HH:MM) al formato di salvataggio (HHMM).
-   */
   function collectDailyData() {
     const data = {};
     ["entrataMattina", "uscitaPranzo", "entrataPomeriggio", "uscitaSera"].forEach(field => {
-        const input = document.getElementById(field).value.trim();
-        // L'input.value è già nel formato HH:MM (grazie al listener blur)
-        // Lo formattiamo nuovamente in HHMM per il salvataggio
-        data[field] = formatTimeInput(input);
+      const input = document.getElementById(field).value.trim();
+      data[field] = formatTimeInput(input);
     });
     return data;
   }
   
-  /**
-   * Carica i dati dal Local Storage e li visualizza nella form.
-   */
   function loadFormFromLocalStorage() {
     const dateId = formatDateId(selectedDate);
     const key = LOCAL_STORAGE_PREFIX + dateId;
     const dataString = localStorage.getItem(key);
     let dailyData = {};
-
     if (dataString) {
-        try {
-            dailyData = JSON.parse(dataString);
-        } catch (e) {
-            console.error("Errore nel parsing dei dati dal Local Storage per", dateId, e);
-            dailyData = {};
-        }
+      try {
+        dailyData = JSON.parse(dataString);
+      } catch (e) { console.error("Errore parsing dati localStorage", e); dailyData = {}; }
     }
-    
-    // Inizializza la form con i dati caricati o valori di default
     ["entrataMattina", "uscitaPranzo", "entrataPomeriggio", "uscitaSera"].forEach(field => {
       const input = document.getElementById(field);
-      // Il Local Storage salva in HHMM (es. '0900')
       const storedHHMM = dailyData[field] || "0000";
-      
-      // Converte per la visualizzazione utente (es. '09:00')
-      const displayValue = timeToDisplay(storedHHMM); 
-      
-      input.value = displayValue;
-      
-      // Gestione dello stile placeholder dinamico
-      if (storedHHMM === "0000") {
-          input.classList.add('italic-placeholder');
-      } else {
-          input.classList.remove('italic-placeholder');
-      }
+      input.value = timeToDisplay(storedHHMM);
+      if (storedHHMM === "0000") input.classList.add('italic-placeholder'); else input.classList.remove('italic-placeholder');
     });
-
     updateDailyCalculations();
     updateStatus("Dati caricati dal Local Storage per la data selezionata.", "info");
   }
 
-
-  /**
-   * Implementazione robusta dei listener focus/blur per la formattazione HH:MM.
-   */
   function addInputListeners() {
-    // Imposta il valore iniziale degli input in HH:MM
     document.querySelectorAll(".time-input").forEach(input => {
-        const initialValue = input.value;
-        if (initialValue === '0000') {
-             input.classList.add('italic-placeholder');
-             input.value = '00:00'; // Assicura che la UI mostri '00:00'
-        } else {
-             input.value = timeToDisplay(formatTimeInput(initialValue)); // Converte 0000 -> 00:00
-        }
-        
-      
-      // 1. INPUT: Aggiorna i calcoli in tempo reale (per feedback visivo)
+      const initialValue = input.value;
+      if (initialValue === '0000') {
+        input.classList.add('italic-placeholder');
+        input.value = '00:00';
+      } else {
+        input.value = timeToDisplay(formatTimeInput(initialValue));
+      }
       input.addEventListener("input", updateDailyCalculations);
-      
-      // 2. FOCUS: Rimuove il ':' e '00:00' per facilitare la digitazione
       input.addEventListener('focus', () => {
         let currentValue = input.value.replace(/:/g, '');
-        if (currentValue === '0000' || currentValue === '000') {
-             currentValue = ''; // Rimuovi lo zero se è 0000 o 00:00
-        }
+        if (currentValue === '0000' || currentValue === '000') currentValue = '';
         input.value = currentValue;
         input.classList.remove('italic-placeholder');
       });
-
-      // 3. BLUR: Formatta in HH:MM e ricalcola quando si esce dal campo
       input.addEventListener("blur", () => {
         const rawValue = input.value;
-        
-        // Sanitize and standardize to HHMM (e.g., '900' -> '0900')
         const standardizedHHMM = formatTimeInput(rawValue);
-        
-        // Convert to HH:MM format for display (e.g., '09:00')
         let displayValue = timeToDisplay(standardizedHHMM);
-        
-        // Gestione dello stile placeholder
         if (standardizedHHMM === '0000') {
-            displayValue = '00:00'; // Display '00:00' e non '0000'
-            input.classList.add('italic-placeholder');
+          displayValue = '00:00';
+          input.classList.add('italic-placeholder');
         } else {
-            input.classList.remove('italic-placeholder');
+          input.classList.remove('italic-placeholder');
         }
-
-        // Applica il valore formattato per la visualizzazione
         input.value = displayValue;
-        
-        // Ricalcola con il valore pulito
         updateDailyCalculations();
       });
-
     });
     document.getElementById("saveButton").onclick = saveDataToLocalStorage;
   }
 
-  /**
-   * Salva i dati nel Local Storage.
-   */
   function saveDataToLocalStorage() {
     const dateId = formatDateId(selectedDate);
     const key = LOCAL_STORAGE_PREFIX + dateId;
-    const dataToSave = collectDailyData(); // Questo ritorna HHMM
+    const dataToSave = collectDailyData();
 
     updateStatus("Salvataggio in corso...", "info");
     try {
       localStorage.setItem(key, JSON.stringify(dataToSave));
       updateStatus("Orario per la data selezionata salvato con successo nel Local Storage!", "success");
-      
-      // Ricarica gli stati del mese per aggiornare il colore del calendario
-      loadMonthStatuses(); 
-
+      loadMonthStatuses();
     } catch (e) {
       console.error("Errore nel salvataggio su Local Storage:", e);
       updateStatus("Errore nel salvataggio. Controlla la console.", "error");
     }
+  }
+
+  // Funzione per esportare dati orari da localStorage in CSV
+  function exportScheduleData() {
+    const startDateInput = document.getElementById('exportStartDate').value;
+    const endDateInput = document.getElementById('exportEndDate').value;
+
+    if (!startDateInput || !endDateInput || startDateInput > endDateInput) {
+      alert('Inserisci un intervallo di date valido.');
+      return;
+    }
+
+    const startDate = new Date(startDateInput);
+    const endDate = new Date(endDateInput);
+
+    let exportText = 'Data,Entrata Mattina,Uscita Pranzo,Entrata Pomeriggio,Uscita Sera\n';
+
+    for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+      const dateKey = LOCAL_STORAGE_PREFIX + formatDateId(d);
+      const dataString = localStorage.getItem(dateKey);
+      if (dataString) {
+        try {
+          const data = JSON.parse(dataString);
+          exportText += `${formatDateId(d)},${data.entrataMattina || ''},${data.uscitaPranzo || ''},${data.entrataPomeriggio || ''},${data.uscitaSera || ''}\n`;
+        } catch (error) {
+          console.error('Errore nel parsing dati per la data ' + formatDateId(d), error);
+        }
+      }
+    }
+
+    const blob = new Blob([exportText], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `orari_${startDateInput}_to_${endDateInput}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   window.onload = function () {
@@ -613,7 +559,8 @@
     renderCalendar();
     selectDate(new Date());
     addInputListeners();
-    loadMonthStatuses(); 
+    loadMonthStatuses();
+    document.getElementById('exportDataBtn').addEventListener('click', exportScheduleData);
   };
 </script>
 
