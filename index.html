@@ -44,7 +44,7 @@
 </head>
 <body>
 <div class="w-full max-w-4xl p-6 bg-white shadow-2xl rounded-xl border border-blue-100">
-  <h1 class="text-3xl font-extrabold text-gray-800 mb-6 text-center border-b-2 pb-3 border-blue-200">Calendario Orario Giornaliero</h1>
+  <h1 class="text-3xl font-extrabold text-gray-800 mb-6 text-center border-b-2 pb-3 border-blue-200">Calendario Orario Giornaliero (Local Storage)</h1>
   <div id="status-message" class="text-center text-sm mb-4 p-2 rounded-lg bg-blue-50 text-blue-800">Inizializzazione del sistema...</div>
   
   <!-- Sezione Calendario -->
@@ -98,37 +98,17 @@
   </div>
 </div>
 
-<script type="module">
-  // Importazioni Firebase corrette
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
-  import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-analytics.js";
-  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js";
-  import { getFirestore, doc, setDoc, onSnapshot, getDocs, collection } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
-
-  // Configurazione Firebase (Hardcoded per la dimostrazione)
-  const firebaseConfig = {
-    apiKey: "AIzaSyBLf5rM8ex0AxlkRM-bluadFgPejb4sLyo",
-    authDomain: "orari-95dbc.firebaseapp.com",
-    projectId: "orari-95dbc",
-    storageBucket: "orari-95dbc.firebasestorage.app",
-    messagingSenderId: "296312974735",
-    appId: "1:296312974735:web:9d8631f5296ee5c93f6ffa",
-    measurementId: "G-QB58E21SDQ"
-  };
-
-  const app = initializeApp(firebaseConfig);
-  const analytics = getAnalytics(app);
-  const auth = getAuth(app);
-  const db = getFirestore(app);
-  const __app_id = "default-app-id"; // Simulazione ID app
+<script>
+  // =======================================================================
+  // CONFIGURAZIONE STATO LOCALE (LOCAL STORAGE)
+  // Rimosse tutte le importazioni e inizializzazioni Firebase.
+  // =======================================================================
 
   // Stato e Variabili
-  let userId = null;
-  let isAuthReady = false;
   let currentCalendarDate = new Date();
   let selectedDate = new Date();
   let dailyStatuses = {};
-  let unsubscribeDailyData = null;
+  const LOCAL_STORAGE_PREFIX = "schedule-"; // Prefisso per le chiavi Local Storage
 
   // Costanti per i calcoli
   const TARGET_MINUTES = 480; // 8 ore (8 * 60)
@@ -181,7 +161,7 @@
   }
   
   /**
-   * NUOVA: Converte una stringa oraria a 4 cifre (HHMM) nel formato display (HH:MM).
+   * Converte una stringa oraria a 4 cifre (HHMM) nel formato display (HH:MM).
    */
   function timeToDisplay(timeString) {
     if (!timeString || timeString === '0000' || timeString.length !== 4) return '0000';
@@ -307,10 +287,10 @@
   }
 
   // =======================================================================
-  // FIRESTORE E UI
+  // PERSISTENZA (LOCAL STORAGE) E UI
   // =======================================================================
 
-  // Funzioni UI/Calendario (non modificate, o solo minimamente)
+  // Funzioni UI/Calendario
   const dayNames = ["Dom", "Lun", "Mar", "Mer", "Gio", "Ven", "Sab"];
   const monthNames = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
   
@@ -354,7 +334,7 @@
       dayCell.textContent = day;
       dayCell.dataset.date = dateId;
 
-      // APPLICAZIONE DEGLI STILI BASATI SULLO STATO
+      // APPLICAZIONE DEGLI STILI BASATI SULLO STATO (dopo loadMonthStatuses)
       if (dailyStatuses[dateId] === 'complete') dayCell.classList.add("status-complete");
       else if (dailyStatuses[dateId] === 'partial') dayCell.classList.add("status-partial");
       
@@ -382,38 +362,53 @@
       selectedDate.getDate() + " " +
       monthNames[selectedDate.getMonth()] + " " +
       selectedDate.getFullYear();
-    startDailyDataListener();
+    loadFormFromLocalStorage(); // Corretto: era loadDailyDataFromLocalStorage()
   }
 
-  async function loadMonthStatuses() {
-    if (!isAuthReady || !userId) return;
+  /**
+   * Carica tutti i dati del mese corrente dal Local Storage e aggiorna gli stati.
+   */
+  function loadMonthStatuses() {
     dailyStatuses = {};
-    const colRef = collection(db, "artifacts", __app_id, "users", userId, "dailyschedule");
-    try {
-      const snapshot = await getDocs(colRef);
-      const currentMonthId = currentCalendarDate.getFullYear() + "-" + String(currentCalendarDate.getMonth() + 1).padStart(2, "0");
-      snapshot.forEach(docSnap => {
-        const dateId = docSnap.id;
-        if (dateId.startsWith(currentMonthId)) {
-          const data = docSnap.data();
-          let filled = 0;
-          // Controlliamo se i 4 campi orari hanno un valore diverso da "0000"
-          ["entrataMattina", "uscitaPranzo", "entrataPomeriggio", "uscitaSera"].forEach(f => {
-            // Il check deve essere robusto: verifica che il campo esista e che non sia '0000'
-            if (data[f] && data[f] !== "0000") filled++;
-          });
+    const currentYear = currentCalendarDate.getFullYear();
+    const currentMonth = String(currentCalendarDate.getMonth() + 1).padStart(2, "0");
+    const currentMonthPrefix = LOCAL_STORAGE_PREFIX + currentYear + "-" + currentMonth;
 
-          // Determina lo stato
-          dailyStatuses[dateId] =
-            filled === 4 ? 'complete' : (filled > 0 ? 'partial' : 'empty');
+    try {
+        // Scorre tutte le chiavi in localStorage
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            
+            // Filtra solo le chiavi di orario per il mese corrente
+            if (key && key.startsWith(currentMonthPrefix)) {
+                const dateId = key.substring(LOCAL_STORAGE_PREFIX.length);
+                const dataString = localStorage.getItem(key);
+                let data = {};
+                
+                try {
+                    data = JSON.parse(dataString);
+                } catch (e) {
+                    console.error("Errore di parsing JSON per la chiave:", key, e);
+                    continue;
+                }
+
+                let filled = 0;
+                // Controlliamo se i 4 campi orari hanno un valore diverso da "0000"
+                ["entrataMattina", "uscitaPranzo", "entrataPomeriggio", "uscitaSera"].forEach(f => {
+                    if (data[f] && data[f] !== "0000") filled++;
+                });
+
+                // Determina lo stato e lo memorizza
+                dailyStatuses[dateId] =
+                    filled === 4 ? 'complete' : (filled > 0 ? 'partial' : 'empty');
+            }
         }
-      });
     } catch (e) {
-      console.error("Error loading month statuses:", e);
+      console.error("Error loading month statuses from Local Storage:", e);
     }
     renderCalendar();
   }
-
+  
   /**
    * Raccoglie i dati, convertendoli dal formato display (HH:MM) al formato di salvataggio (HHMM).
    */
@@ -428,12 +423,27 @@
   }
   
   /**
-   * Aggiornata per gestire lo stile del placeholder E per mostrare HH:MM.
+   * Carica i dati dal Local Storage e li visualizza nella form.
    */
-  function loadFormFromFirestore(dailyData = {}) {
+  function loadFormFromLocalStorage() {
+    const dateId = formatDateId(selectedDate);
+    const key = LOCAL_STORAGE_PREFIX + dateId;
+    const dataString = localStorage.getItem(key);
+    let dailyData = {};
+
+    if (dataString) {
+        try {
+            dailyData = JSON.parse(dataString);
+        } catch (e) {
+            console.error("Errore nel parsing dei dati dal Local Storage per", dateId, e);
+            dailyData = {};
+        }
+    }
+    
+    // Inizializza la form con i dati caricati o valori di default
     ["entrataMattina", "uscitaPranzo", "entrataPomeriggio", "uscitaSera"].forEach(field => {
       const input = document.getElementById(field);
-      // Il Firestore salva in HHMM (es. '0900')
+      // Il Local Storage salva in HHMM (es. '0900')
       const storedHHMM = dailyData[field] || "0000";
       
       // Converte per la visualizzazione utente (es. '09:00')
@@ -448,9 +458,11 @@
           input.classList.remove('italic-placeholder');
       }
     });
+
     updateDailyCalculations();
-    updateStatus("Dati caricati per la data selezionata.", "success");
+    updateStatus("Dati caricati dal Local Storage per la data selezionata.", "info");
   }
+
 
   /**
    * Implementazione robusta dei listener focus/blur per la formattazione HH:MM.
@@ -497,67 +509,37 @@
       });
 
     });
-    document.getElementById("saveButton").onclick = saveDataToFirestore;
+    document.getElementById("saveButton").onclick = saveDataToLocalStorage;
   }
 
-  function startDailyDataListener() {
-    if (!isAuthReady || !userId) return;
-    if (unsubscribeDailyData) unsubscribeDailyData();
+  /**
+   * Salva i dati nel Local Storage.
+   */
+  function saveDataToLocalStorage() {
     const dateId = formatDateId(selectedDate);
-    const docRef = doc(db, "artifacts", __app_id, "users", userId, "dailyschedule", dateId);
-    unsubscribeDailyData = onSnapshot(docRef, (docSnap) => {
-      if (docSnap.exists()) loadFormFromFirestore(docSnap.data());
-      else loadFormFromFirestore({});
-    }, (error) => {
-        console.error("Errore onSnapshot:", error);
-        updateStatus("Errore nel caricamento in tempo reale dei dati.", "error");
-    });
-  }
-
-  async function saveDataToFirestore() {
-    if (!isAuthReady || !userId) {
-      updateStatus('Errore: Autenticazione non completa. Impossibile salvare.', 'error');
-      return;
-    }
-    const dateId = formatDateId(selectedDate);
-    // Usa collectDailyData che pulisce l'input prima del salvataggio
+    const key = LOCAL_STORAGE_PREFIX + dateId;
     const dataToSave = collectDailyData(); 
-    const docRef = doc(db, "artifacts", __app_id, "users", userId, "dailyschedule", dateId);
+    
     updateStatus("Salvataggio in corso...", "info");
     try {
-      await setDoc(docRef, dataToSave);
-      updateStatus("Orario per la data selezionata salvato con successo!", "success");
+      localStorage.setItem(key, JSON.stringify(dataToSave));
+      updateStatus("Orario per la data selezionata salvato con successo nel Local Storage!", "success");
       
       // Ricarica gli stati del mese per aggiornare il colore del calendario
       loadMonthStatuses(); 
 
     } catch (e) {
-      console.error("Errore nel salvataggio manuale:", e);
-      updateStatus("Errore nel salvataggio manuale. Controlla la console.", "error");
+      console.error("Errore nel salvataggio su Local Storage:", e);
+      updateStatus("Errore nel salvataggio. Controlla la console.", "error");
     }
   }
 
-  window.onload = async function () {
-    try {
-      // Usiamo signInAnonymously per l'ambiente di prova
-      await signInAnonymously(auth); 
-      onAuthStateChanged(auth, (user) => {
-        if (user) {
-          userId = user.uid;
-          isAuthReady = true;
-          updateStatus("Connesso al database. ID utente: " + userId.substring(0, 8) + "...", "success");
-          renderCalendar();
-          selectDate(new Date());
-          addInputListeners();
-          loadMonthStatuses();
-        } else {
-          updateStatus("Disconnesso. Riconnessione...", "error");
-        }
-      });
-    } catch (e) {
-      updateStatus("ERRORE CRITICO DI AUTENTICAZIONE/CONNESSIONE: " + e.message, "error");
-      console.error("Errore Firebase Critico:", e);
-    }
+  window.onload = function () {
+    updateStatus("Applicazione inizializzata. Dati salvati in Local Storage.");
+    renderCalendar();
+    selectDate(new Date());
+    addInputListeners();
+    loadMonthStatuses(); // Carica gli stati iniziali
   };
 </script>
 
