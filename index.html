@@ -5,26 +5,40 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Calendario Orario Giornaliero</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- AGGIUNTO: Libreria SheetJS per l'esportazione in Excel (.xlsx) -->
+  <!-- Libreria SheetJS per l'esportazione in Excel (.xlsx) -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     /* Stili Base */
     body { font-family: Inter, sans-serif; background-color: #f0f4f8; min-height: 100vh; display: flex; justify-content: center; align-items: flex-start; padding: 2rem 1rem; }
+    
+    /* MODIFICATO: Il wrapper della cella ora è un flex container per input + button */
     .input-cell-wrapper { padding: 0; text-align: center; }
-    .time-input { width: 100%; padding: 0.5rem 0.25rem; text-align: center; border: none; background-color: transparent; font-size: 1rem; line-height: 1.25rem; border-radius: 0.375rem; outline: none; transition: background-color 0.2s, box-shadow 0.2s; }
+    
+    .time-input { 
+        width: 100%; 
+        padding: 0.5rem 0.25rem; 
+        text-align: center; 
+        border: none; 
+        background-color: transparent; 
+        font-size: 1rem; 
+        line-height: 1.25rem; 
+        border-radius: 0.375rem; 
+        outline: none; 
+        transition: background-color 0.2s, box-shadow 0.2s; 
+    }
     .time-input:focus { background-color: #e0f2fe; box-shadow: 0 0 0 2px #93c5fd; }
     
     /* Stile per il placeholder (quando il valore è 0000) - Usiamo una classe per il controllo JS */
     .time-input.italic-placeholder { color: #9ca3af; font-style: italic; } 
     
-    /* Stili Calendario AGGIORNATI per status */
+    /* Stili Calendario */
     .calendar-day { transition: all 0.15s ease-in-out; cursor: pointer; user-select: none; height: 48px; display: flex; align-items: center; justify-content: center; color: #374151; font-weight: 500; }
     .calendar-day:hover { background-color: #e0f2fe; transform: scale(1.05);}
     
     /* Selezionato (priorità massima) */
     .calendar-day.selected { background-color: #3b82f6; color: white; font-weight: bold; border-radius: 0.375rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
 
-    /* STATI AGGIUNTI PER IL REQUISITO UTENTE */
+    /* STATI */
     .calendar-day.status-partial { 
         background-color: #fde68a; /* Giallo 200 */
         color: #92400e; /* Giallo scuro testo */
@@ -35,7 +49,6 @@
         color: #065f46; /* Verde scuro testo */
         font-weight: 600; 
     }
-    /* Se un giorno è selezionato E completo/parziale, usiamo lo stile selected */
     .calendar-day.selected.status-partial, 
     .calendar-day.selected.status-complete {
         background-color: #3b82f6; 
@@ -46,7 +59,7 @@
 </head>
 <body>
 <div class="w-full max-w-4xl p-6 bg-white shadow-2xl rounded-xl border border-blue-100">
-  <h1 class="text-3xl font-extrabold text-gray-800 mb-6 text-center border-b-2 pb-3 border-blue-200">Gestore Orario Giornaliero</h1>
+  <h1 class="text-3xl font-extrabold text-gray-800 mb-6 text-center border-b-2 pb-3 border-blue-200">Timbrature</h1>
   <div id="status-message" class="text-center text-sm mb-4 p-2 rounded-lg bg-blue-50 text-blue-800">Inizializzazione del sistema...</div>
   
   <!-- Sezione Calendario -->
@@ -69,21 +82,53 @@
           </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
+          <!-- Entrata Mattina -->
           <tr class="hover:bg-gray-50">
             <td class="px-3 py-3 text-sm font-medium text-gray-900">Entrata Mattina</td>
-            <td class="input-cell-wrapper border-l border-r border-gray-200"><input type="text" id="entrataMattina" class="time-input" value="00:00"></td>
+            <td class="input-cell-wrapper border-l border-r border-gray-200">
+                <div class="flex items-center gap-1 p-1">
+                    <input type="text" id="entrataMattina" class="time-input flex-grow" value="00:00">
+                    <button type="button" data-target="entrataMattina" class="set-time-btn p-2 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-150 shadow-sm" title="Imposta ora corrente">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </button>
+                </div>
+            </td>
           </tr>
+          <!-- Uscita Pranzo -->
           <tr class="hover:bg-gray-50">
             <td class="px-3 py-3 text-sm font-medium text-gray-900">Uscita Pranzo</td>
-            <td class="input-cell-wrapper border-l border-r border-gray-200"><input type="text" id="uscitaPranzo" class="time-input" value="00:00"></td>
+            <td class="input-cell-wrapper border-l border-r border-gray-200">
+                <div class="flex items-center gap-1 p-1">
+                    <input type="text" id="uscitaPranzo" class="time-input flex-grow" value="00:00">
+                    <button type="button" data-target="uscitaPranzo" class="set-time-btn p-2 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-150 shadow-sm" title="Imposta ora corrente">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </button>
+                </div>
+            </td>
           </tr>
+          <!-- Entrata Pomeriggio -->
           <tr class="hover:bg-gray-50">
             <td class="px-3 py-3 text-sm font-medium text-gray-900">Entrata Pomeriggio</td>
-            <td class="input-cell-wrapper border-l border-r border-gray-200"><input type="text" id="entrataPomeriggio" class="time-input" value="00:00"></td>
+            <td class="input-cell-wrapper border-l border-r border-gray-200">
+                <div class="flex items-center gap-1 p-1">
+                    <input type="text" id="entrataPomeriggio" class="time-input flex-grow" value="00:00">
+                    <button type="button" data-target="entrataPomeriggio" class="set-time-btn p-2 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-150 shadow-sm" title="Imposta ora corrente">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </button>
+                </div>
+            </td>
           </tr>
+          <!-- Uscita Sera -->
           <tr class="hover:bg-gray-50">
             <td class="px-3 py-3 text-sm font-medium text-gray-900">Uscita Sera</td>
-            <td class="input-cell-wrapper border-l border-r border-gray-200"><input type="text" id="uscitaSera" class="time-input" value="00:00"></td>
+            <td class="input-cell-wrapper border-l border-r border-gray-200">
+                <div class="flex items-center gap-1 p-1">
+                    <input type="text" id="uscitaSera" class="time-input flex-grow" value="00:00">
+                    <button type="button" data-target="uscitaSera" class="set-time-btn p-2 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-150 shadow-sm" title="Imposta ora corrente">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </button>
+                </div>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -134,7 +179,6 @@
         <label for="endDate" class="block text-sm font-medium text-gray-700">Data Fine:</label>
         <input type="date" id="endDate" class="mt-1 p-2 w-full border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
       </div>
-      <!-- TESTO DEL PULSANTE AGGIORNATO PER EXCEL -->
       <button id="exportButton" class="w-full sm:w-auto mt-6 sm:mt-4 px-6 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-xl hover:bg-indigo-700 transition duration-150 ease-in-out focus:outline-none focus:ring-4 focus:ring-indigo-500/50">
         Esporta in Excel (.xlsx)
       </button>
@@ -227,7 +271,6 @@
     if (cleaned.length === 0) return '0000';
     
     // 2. Logica di pad per l'input:
-    // Esempi: "8" -> "0800", "17" -> "1700", "1735" -> "1735"
     if (cleaned.length < 4) {
         if (cleaned.length <= 2) {
             // Se 1 o 2 cifre, assume ore complete
@@ -248,6 +291,16 @@
     minutes = Math.min(minutes, 59);
 
     return String(hours).padStart(2, '0') + String(minutes).padStart(2, '0');
+  }
+
+  /**
+   * OTTIENE L'ORA CORRENTE FORMATTATA (HH:MM)
+   */
+  function getCurrentFormattedTime() {
+    const now = new Date();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
   }
 
 
@@ -611,6 +664,31 @@
   }
 
   /**
+   * Attacca i listener ai nuovi pulsanti "Imposta Ora Corrente".
+   */
+  function attachSetTimeButtonListeners() {
+    document.querySelectorAll('.set-time-btn').forEach(button => {
+        button.addEventListener('click', () => {
+            const targetId = button.dataset.target; // ID del campo input target
+            const inputField = document.getElementById(targetId);
+            const currentTime = getCurrentFormattedTime(); // Ottiene l'ora HH:MM
+
+            if (inputField) {
+                inputField.value = currentTime;
+                inputField.classList.remove('italic-placeholder');
+                
+                // Forza l'evento 'blur' per attivare la formattazione HH:MM (se necessario) 
+                // e soprattutto per aggiornare i calcoli (updateDailyCalculations)
+                const event = new Event('blur');
+                inputField.dispatchEvent(event);
+                
+                updateStatus(`Ora corrente (${currentTime}) impostata per ${targetId}.`, "success");
+            }
+        });
+    });
+  }
+
+  /**
    * Salva i dati nel Local Storage.
    */
   function saveDataToLocalStorage() {
@@ -681,7 +759,6 @@
 
   /**
    * Esporta i dati di un intervallo di date in formato EXCEL (.xlsx).
-   * LOGICA COMPLETAMENTE RISCRITTA per usare SheetJS.
    */
   function exportDataAsXLSX() {
     // Verifica l'esistenza della libreria SheetJS
@@ -764,8 +841,8 @@
     // Scrive il file e forza il download
     XLSX.writeFile(workbook, filename);
     
-    // Messaggio di conferma aggiornato
-    updateStatus(`Esportazione completata! File Excel "${filename}" generato.`, "success");
+    // AGGIORNAMENTO: Messaggio che indirizza l'utente a Google Drive/Fogli
+    updateStatus(`Esportazione completata! File Excel "${filename}" generato. Per salvarlo in Google Drive, **trascina il file scaricato nella finestra di Google Drive** o **aprilo con Google Fogli** per la conversione automatica.`, "success");
   }
 
   // Funzione di inizializzazione per i campi data di esportazione
@@ -778,7 +855,7 @@
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       document.getElementById('startDate').value = formatDateId(thirtyDaysAgo);
       
-      // AGGIORNATO: Collega il pulsante alla nuova funzione di esportazione Excel
+      // Collega il pulsante alla nuova funzione di esportazione Excel
       document.getElementById("exportButton").onclick = exportDataAsXLSX;
   }
 
@@ -790,6 +867,7 @@
     addInputListeners();
     loadMonthStatuses(); 
     initializeExportInputs(); // Inizializza la sezione di esportazione
+    attachSetTimeButtonListeners(); // COLLEGA I NUOVI PULSANTI ORA CORRENTE
   };
 </script>
 
