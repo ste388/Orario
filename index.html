@@ -172,11 +172,11 @@
         <div id="pausaPranzoStatus" class="text-xs font-semibold mt-1 text-gray-600">Inserisci orari</div>
       </div>
       
-      <!-- Uscita Teorica Card -->
+      <!-- Uscita Teorica Card (Aggiornata per mostrare sempre HH:MM) -->
       <div class="p-4 rounded-lg shadow-xl bg-purple-100 border border-purple-300">
         <div class="text-xs font-medium text-purple-700 mb-1">Uscita per 8 Ore (Teorica)</div>
-        <div id="uscitaTeorica" class="text-3xl font-extrabold text-purple-800">00:00</div>
-        <div class="text-xs font-semibold text-purple-700 mt-1" title="Uscita richiesta per totalizzare 8 ore (con pausa minima di 1:00h)">1:00h di pausa inclusa</div>
+        <div id="uscitaTeorica" class="text-3xl font-extrabold text-purple-800">---</div>
+        <div class="text-xs font-semibold text-purple-700 mt-1" title="Uscita richiesta per totalizzare 8 ore di lavoro.">8:00h di lavoro richiesto</div>
       </div>
       
       <!-- Totale Ore Lavorate Card -->
@@ -320,63 +320,75 @@
 
 
   // =======================================================================
-  // LOGICA CALCOLI
+  // LOGICA CALCOLI (AGGIORNATA PER USCITA TEORICA DINAMICA)
   // =======================================================================
 
   /**
-   * Calcola le durate (lavoro totale e pausa) da un oggetto dati HHMM o da valori HH:MM.
-   * Ritorna un oggetto con tutti i risultati.
+   * Calcola le durate (lavoro totale e pausa) dalla data (formato HHMM).
    */
   function calculateDurations(data) {
-    // Gestisce sia oggetti data (da localStorage) che valori diretti (da form)
-    const tstartm = (data.entrataMattina || "").trim();
-    const tendm = (data.uscitaPranzo || "").trim();
-    const tstartp = (data.entrataPomeriggio || "").trim();
-    const tendp = (data.uscitaSera || "").trim();
-    
-    // Conversione in minuti
-    const mstartm = timeToMinutes(tstartm);
-    const mendm = timeToMinutes(tendm);
-    const mstartp = timeToMinutes(tendm); // Corretto: mstartp usa il valore di entrataPomeriggio
-    const mendp = timeToMinutes(tendp);
+    // Estrazione e pulizia dei dati
+    const tE1 = (data.entrataMattina || "").trim(); // Entrata Mattina
+    const tU1 = (data.uscitaPranzo || "").trim();   // Uscita Pranzo
+    const tE2 = (data.entrataPomeriggio || "").trim(); // Entrata Pomeriggio
+    const tU2 = (data.uscitaSera || "").trim();   // Uscita Sera
 
-    // Durate
-    const morningDuration = Math.max(0, mendm - mstartm);
-    const afternoonDuration = Math.max(0, mendp - mstartp);
-    let breakDuration = 0; 
+    // 1. Conversione in minuti
+    const mE1 = timeToMinutes(tE1); 
+    const mU1 = timeToMinutes(tU1); 
+    const mE2 = timeToMinutes(tE2); 
+    const mU2 = timeToMinutes(tU2); 
+
+    // 2. Durata Mattina (U1 - E1)
+    // Valido solo se U1 è > E1
+    const morningWorkMinutes = (mE1 > 0 && mU1 > mE1) ? (mU1 - mE1) : 0; 
+
+    // 3. Durata Pomeriggio (U2 - E2)
+    // Valido solo se U2 è > E2
+    const afternoonWorkMinutes = (mE2 > 0 && mU2 > mE2) ? (mU2 - mE2) : 0; 
     
-    // Corretto: breakDuration calcolato correttamente con mstartp e mendm
-    const mstartp_from_data = timeToMinutes((data.entrataPomeriggio || "").trim());
-    if (mstartp_from_data > 0 && mendm > 0 && mstartp_from_data > mendm) {
-        breakDuration = mstartp_from_data - mendm;
+    // 4. Durata Totale Lavoro
+    const totalDuration = morningWorkMinutes + afternoonWorkMinutes;
+
+    // 5. Durata Pausa Pranzo (E2 - U1)
+    let breakDuration = 0;
+    // La pausa è valida solo se l'Uscita Pranzo (U1) è stata registrata E l'Entrata Pomeriggio (E2) è successiva a U1
+    if (mU1 > 0 && mE2 > mU1) { 
+        breakDuration = mE2 - mU1; 
     } 
 
-    const totalDuration = morningDuration + afternoonDuration;
-
-    // Calcolo Uscita Teorica
-    const minutesNeededAfternoon = TARGET_MINUTES - morningDuration;
+    // 6. Calcolo Uscita Teorica (Target 8 ore = 480 minuti)
     let theoreticalExitMinutes = 0;
+    let theoreticalExitDisplay = '---'; // Default se manca E1
 
-    if (morningDuration > 0) {
-        if (minutesNeededAfternoon > 0) {
-            const m_min_start_p = mendm + MIN_BREAK; 
-            let m_theoretical_start_p = mstartp_from_data > 0 ? Math.max(mstartp_from_data, m_min_start_p) : m_min_start_p;
-            theoreticalExitMinutes = m_theoretical_start_p + minutesNeededAfternoon;
-        }
+    
+    if (mE1 > 0 && mU1 > mE1 && mE2 > mU1) {
+        // Logica 1: Se Entrata, Uscita Pranzo e Rientro Pomeriggio sono noti.
+        // Calcola l'uscita teorica come Rientro Pomeriggio + Lavoro Rimanente
+        
+        // Lavoro Rimanente (per arrivare a 8 ore)
+        const remainingWorkMinutes = Math.max(0, TARGET_MINUTES - morningWorkMinutes);
+
+        // Uscita Teorica = Entrata Pomeriggio + Lavoro Rimanente
+        theoreticalExitMinutes = mE2 + remainingWorkMinutes;
+        theoreticalExitDisplay = timeToDisplay(minutesToHoursString(theoreticalExitMinutes));
+
+    } else if (mE1 > 0) {
+        // Logica 2: Fallback se ho solo Entrata Mattina (E1).
+        // Uso la regola standard: E1 + 8h lavoro + 1h pausa minima = 9:00h totali
+        
+        const TOTAL_TIME_SPAN_MINUTES = 480 + 60; // 540 minutes (9 hours)
+        theoreticalExitMinutes = mE1 + TOTAL_TIME_SPAN_MINUTES;
+        theoreticalExitDisplay = timeToDisplay(minutesToHoursString(theoreticalExitMinutes));
     }
     
     // Preparazione dei risultati in formato display HH:MM
-    const totalHoursDisplay = timeToDisplay(minutesToHoursString(totalDuration));
-    const breakDurationDisplay = timeToDisplay(minutesToHoursString(breakDuration));
-    let theoreticalExitDisplay = timeToDisplay(minutesToHoursString(theoreticalExitMinutes));
-    if (morningDuration > 0 && minutesNeededAfternoon <= 0) theoreticalExitDisplay = 'Raggiunte';
-
     return {
         totalDurationMinutes: totalDuration,
-        totalHoursDisplay: totalHoursDisplay,
-        breakDurationDisplay: breakDurationDisplay,
-        breakDurationMinutes: breakDuration, // Aggiunto per il check della pausa minima
-        theoreticalExitDisplay: theoreticalExitDisplay
+        totalHoursDisplay: timeToDisplay(minutesToHoursString(totalDuration)),
+        breakDurationDisplay: timeToDisplay(minutesToHoursString(breakDuration)),
+        breakDurationMinutes: breakDuration,
+        theoreticalExitDisplay: theoreticalExitDisplay // Restituisce sempre HH:MM o '---'
     };
   }
 
@@ -423,8 +435,8 @@
         pausaPranzoStatus.classList.add('text-gray-600');
     }
 
-    // 3. Uscita Teorica
-    document.getElementById("uscitaTeorica").textContent = results.theoreticalExitDisplay === '00:00' ? '----' : results.theoreticalExitDisplay;
+    // 3. Uscita Teorica (Ora sempre in HH:MM o '---')
+    document.getElementById("uscitaTeorica").textContent = results.theoreticalExitDisplay;
   }
 
   // =======================================================================
