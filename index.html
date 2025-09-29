@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Calendario Orario Giornaliero</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Stili Base */
+    body { font-family: Inter, sans-serif; background-color: #f0f4f8; min-height: 100vh; display: flex; justify-content: center; align-items: flex-start; padding: 2rem 1rem; }
+    .input-cell-wrapper { padding: 0; text-align: center; }
+    .time-input { width: 100%; padding: 0.5rem 0.25rem; text-align: center; border: none; background-color: transparent; font-size: 1rem; line-height: 1.25rem; border-radius: 0.375rem; outline: none; transition: background-color 0.2s, box-shadow 0.2s; }
+    .time-input:focus { background-color: #e0f2fe; box-shadow: 0 0 0 2px #93c5fd; }
+    
+    /* Stile per il placeholder (quando il valore è 0000) - Usiamo una classe per il controllo JS */
+    .time-input.italic-placeholder { color: #9ca3af; font-style: italic; } 
+    
+    /* Stili Calendario AGGIORNATI per status */
+    .calendar-day { transition: all 0.15s ease-in-out; cursor: pointer; user-select: none; height: 48px; display: flex; align-items: center; justify-content: center; color: #374151; font-weight: 500; }
+    .calendar-day:hover { background-color: #e0f2fe; transform: scale(1.05);}
+    
+    /* Selezionato (priorità massima) */
+    .calendar-day.selected { background-color: #3b82f6; color: white; font-weight: bold; border-radius: 0.375rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+
+    /* STATI AGGIUNTI PER IL REQUISITO UTENTE */
+    .calendar-day.status-partial { 
+        background-color: #fde68a; /* Giallo 200 */
+        color: #92400e; /* Giallo scuro testo */
+        font-weight: 600; 
+    }
+    .calendar-day.status-complete { 
+        background-color: #a7f3d0; /* Verde 200 */
+        color: #065f46; /* Verde scuro testo */
+        font-weight: 600; 
+    }
+    /* Se un giorno è selezionato E completo/parziale, usiamo lo stile selected */
+    .calendar-day.selected.status-partial, 
+    .calendar-day.selected.status-complete {
+        background-color: #3b82f6; 
+        color: white;
+    }
+
+  </style>
+</head>
+<body>
+<div class="w-full max-w-4xl p-6 bg-white shadow-2xl rounded-xl border border-blue-100">
+  <h1 class="text-3xl font-extrabold text-gray-800 mb-6 text-center border-b-2 pb-3 border-blue-200">Calendario Orario Giornaliero (Local Storage)</h1>
+  <div id="status-message" class="text-center text-sm mb-4 p-2 rounded-lg bg-blue-50 text-blue-800">Inizializzazione del sistema...</div>
+  
+  <!-- Sezione Calendario -->
+  <div class="mb-8 p-4 bg-blue-600 text-white rounded-xl shadow-lg">
+    <div id="calendar-header" class="flex justify-between items-center mb-4"></div>
+    <div id="calendar-grid" class="grid grid-cols-7 gap-1 text-center"></div>
+  </div>
+  
+  <!-- Sezione Form Orari -->
+  <div id="daily-schedule-form" class="p-6 border border-gray-200 rounded-xl bg-gray-50 shadow-inner">
+    <h2 class="text-2xl font-bold text-gray-700 mb-4 text-center">Orario per <span id="selected-date-display" class="text-blue-600">Oggi</span></h2>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-gray-300">
+        <thead class="bg-blue-100/50">
+          <tr>
+            <th class="px-3 py-3 text-center text-sm font-medium text-gray-700">Campo</th>
+            <th class="px-3 py-3 text-center text-sm font-medium text-gray-700">Valore</th>
+            <th class="px-3 py-3 text-center text-sm font-medium text-gray-700 bg-blue-200/50">Risultato Calcolato</th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          <tr class="hover:bg-gray-50">
+            <td class="px-3 py-3 text-sm font-medium text-gray-900">Entrata Mattina</td>
+            <td class="input-cell-wrapper border-l border-r border-gray-200"><input type="text" id="entrataMattina" class="time-input" value="0000"></td>
+            <td class="bg-transparent"></td>
+          </tr>
+          <tr class="hover:bg-gray-50">
+            <td class="px-3 py-3 text-sm font-medium text-gray-900">Uscita Pranzo</td>
+            <td class="input-cell-wrapper border-l border-r border-gray-200"><input type="text" id="uscitaPranzo" class="time-input" value="0000"></td>
+            <td id="pausaPranzo" class="px-3 py-3 text-sm font-semibold text-gray-700 bg-blue-50 text-center" title="Durata Pausa">0000</td>
+          </tr>
+          <tr class="hover:bg-gray-50">
+            <td class="px-3 py-3 text-sm font-medium text-gray-900">Entrata Pomeriggio</td>
+            <td class="input-cell-wrapper border-l border-r border-gray-200"><input type="text" id="entrataPomeriggio" class="time-input" value="0000"></td>
+            <!-- Titolo corretto: 1:00h di pausa, non 100 minuti -->
+            <td id="uscitaTeorica" class="px-3 py-3 text-sm font-bold text-purple-700 bg-purple-100 text-center" title="Uscita richiesta per totalizzare 8 ore (con 1:00h di pausa)">0000</td>
+          </tr>
+          <tr class="hover:bg-gray-50">
+            <td class="px-3 py-3 text-sm font-medium text-gray-900">Uscita Sera</td>
+            <td class="input-cell-wrapper border-l border-r border-gray-200"><input type="text" id="uscitaSera" class="time-input" value="0000"></td>
+            <td id="totalHours" class="px-3 py-3 text-sm font-extrabold text-green-700 bg-green-100 text-center" title="Totale ore lavorate (Mattina + Pomeriggio)">0000</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="flex justify-center mt-6">
+      <button id="saveButton" class="px-6 py-3 bg-green-600 text-white font-semibold rounded-lg shadow-xl hover:bg-green-700 transition duration-150 ease-in-out focus:outline-none focus:ring-4 focus:ring-green-500/50">
+        Salva Orario per questa Data
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // =======================================================================
+  // CONFIGURAZIONE STATO LOCALE (LOCAL STORAGE)
+  // Rimosse tutte le importazioni e inizializzazioni Firebase.
+  // =======================================================================
+
+  // Stato e Variabili
+  let currentCalendarDate = new Date();
+  let selectedDate = new Date();
+  let dailyStatuses = {};
+  const LOCAL_STORAGE_PREFIX = "schedule-"; // Prefisso per le chiavi Local Storage
+
+  // Costanti per i calcoli
+  const TARGET_MINUTES = 480; // 8 ore (8 * 60)
+  const MIN_BREAK = 60; // Pausa minima 1:00h
+
+  // =======================================================================
+  // UTILITY PER DATE E TEMPO
+  // =======================================================================
+
+  function formatDateId(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
+  /**
+   * Converte una stringa oraria (es. HHMM o HH:MM) in minuti totali.
+   * Rimuove i caratteri non numerici per robustezza.
+   */
+  function timeToMinutes(timeString) {
+    if (!timeString) return 0;
+    // Rimuove i caratteri non numerici e fa il pad a 4 cifre per la conversione
+    const digitsOnly = timeString.replace(/[^0-9]/g, '').padStart(4, '0').substring(0, 4);
+
+    if (digitsOnly === "0000") return 0; // 0000 = 0 minuti
+
+    const hours = parseInt(digitsOnly.substring(0, 2), 10);
+    const minutes = parseInt(digitsOnly.substring(2, 4), 10);
+    
+    // Convalida: se ore/minuti sono fuori range (es. 25:00), ritorna 0 minuti.
+    if (hours > 23 || minutes > 59) return 0; 
+    
+    return hours * 60 + minutes;
+  }
+  
+  /**
+   * Converte minuti totali in una stringa oraria a 4 cifre (HHMM).
+   * Utilizzato per i risultati calcolati (es. totalHours).
+   */
+  function minutesToHoursString(totalMinutes) {
+    if (totalMinutes < 0 || isNaN(totalMinutes)) return "0000";
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    
+    const formattedHours = String(hours).padStart(2, "0");
+    const formattedMinutes = String(minutes).padStart(2, "0");
+
+    return formattedHours + formattedMinutes;
+  }
+  
+  /**
+   * Converte una stringa oraria a 4 cifre (HHMM) nel formato display (HH:MM).
+   */
+  function timeToDisplay(timeString) {
+    if (!timeString || timeString === '0000' || timeString.length !== 4) return '0000';
+    const hours = timeString.substring(0, 2);
+    const minutes = timeString.substring(2, 4);
+    return `${hours}:${minutes}`;
+  }
+  
+  /**
+   * Pulisce l'input grezzo (es. '900' o '9:30') e lo formatta nel formato canonico a 4 cifre (HHMM).
+   * Ritorna sempre HHMM.
+   */
+  function formatTimeInput(rawInput) {
+    // 1. Rimuove i caratteri non numerici (es. '9:30' -> '930')
+    let cleaned = rawInput.replace(/[^0-9]/g, '');
+
+    if (cleaned.length === 0) return '0000';
+    
+    // 2. Logica di pad per l'input:
+    // Esempi: "8" -> "0800", "17" -> "1700", "1735" -> "1735"
+    if (cleaned.length < 4) {
+        if (cleaned.length <= 2) {
+            // Se 1 o 2 cifre, assume ore complete
+            cleaned = cleaned.padStart(2, '0') + '00';
+        } else {
+            // Se 3 cifre (es. '930'), tenta di inferire HHMM
+            cleaned = cleaned.padStart(4, '0').substring(0, 4);
+        }
+    } else if (cleaned.length > 4) {
+        cleaned = cleaned.substring(0, 4);
+    }
+    
+    let hours = parseInt(cleaned.substring(0, 2), 10);
+    let minutes = parseInt(cleaned.substring(2, 4), 10);
+
+    // 3. Convalida (Clamping) e ricostruzione HHMM
+    hours = Math.min(hours, 23);
+    minutes = Math.min(minutes, 59);
+
+    return String(hours).padStart(2, '0') + String(minutes).padStart(2, '0');
+  }
+
+
+  // =======================================================================
+  // LOGICA CALCOLI
+  // =======================================================================
+
+  function updateDailyCalculations() {
+    // timeToMinutes ora gestisce il formato HH:MM (strip colon)
+    const tstartm = document.getElementById("entrataMattina").value.trim();
+    const tendm = document.getElementById("uscitaPranzo").value.trim();
+    const tstartp = document.getElementById("entrataPomeriggio").value.trim();
+    const tendp = document.getElementById("uscitaSera").value.trim();
+    
+    // Conversione in minuti
+    const mstartm = timeToMinutes(tstartm);
+    const mendm = timeToMinutes(tendm);
+    const mstartp = timeToMinutes(tstartp);
+    const mendp = timeToMinutes(tendp);
+
+    // Durate
+    const morningDuration = Math.max(0, mendm - mstartm);
+    const afternoonDuration = Math.max(0, mendp - mstartp);
+    let breakDuration = 0; 
+    
+    if (mstartp > 0 && mendm > 0 && mstartp > mendm) {
+        breakDuration = mstartp - mendm;
+    } 
+
+    const totalDuration = morningDuration + afternoonDuration;
+    document.getElementById("totalHours").textContent = minutesToHoursString(totalDuration);
+    
+    // 1. Pausa Pranzo e Styling
+    const pausaPranzoCell = document.getElementById("pausaPranzo");
+    pausaPranzoCell.textContent = minutesToHoursString(breakDuration);
+
+    pausaPranzoCell.classList.remove('bg-red-200', 'text-red-800', 'font-extrabold', 'bg-blue-50', 'text-gray-700', 'font-semibold');
+
+    if (breakDuration > 0 && breakDuration < MIN_BREAK) {
+        pausaPranzoCell.classList.add('bg-red-200', 'text-red-800', 'font-extrabold');
+        pausaPranzoCell.title = `ATTENZIONE: Pausa (${minutesToHoursString(breakDuration)}) inferiore a 1:00h.`;
+    } else if (breakDuration >= MIN_BREAK) {
+        pausaPranzoCell.classList.add('bg-blue-50', 'text-gray-700', 'font-semibold');
+        pausaPranzoCell.title = `Pausa valida.`;
+    } else {
+        pausaPranzoCell.classList.add('bg-blue-50', 'text-gray-700', 'font-semibold');
+        pausaPranzoCell.title = `Nessuna pausa registrata.`;
+    }
+
+    // 2. Uscita Teorica per ${TARGET_MINUTES/60} ore
+    const minutesNeededAfternoon = TARGET_MINUTES - morningDuration;
+    let theoreticalExitString = '----'; 
+    
+    if (morningDuration > 0) {
+        if (minutesNeededAfternoon <= 0) {
+            theoreticalExitString = 'Raggiunte';
+        } else {
+            // Orario minimo di rientro (Uscita Pranzo + 60 min)
+            const m_min_start_p = mendm + MIN_BREAK; 
+            let m_theoretical_start_p = m_min_start_p;
+
+            // Se l'utente ha inserito l'entrata pomeridiana (mstartp > 0), usiamo il max tra il suo input 
+            // e l'orario minimo di rientro per garantire la pausa minima.
+            if (mstartp > 0) {
+                m_theoretical_start_p = Math.max(mstartp, m_min_start_p);
+            } else {
+                // Altrimenti, per il calcolo teorico, assumiamo che l'Entrata Pomeriggio sia dopo la pausa minima.
+                m_theoretical_start_p = m_min_start_p;
+            }
+            
+            // Calcola l'uscita aggiungendo i minuti necessari
+            const theoreticalExitMinutes = m_theoretical_start_p + minutesNeededAfternoon;
+            
+            if (theoreticalExitMinutes < (24 * 60)) {
+                theoreticalExitString = minutesToHoursString(theoreticalExitMinutes);
+            } else {
+                theoreticalExitString = 'Oltre 24h';
+            }
+        }
+    }
+
+    document.getElementById("uscitaTeorica").textContent = theoreticalExitString;
+  }
+
+  // =======================================================================
+  // PERSISTENZA (LOCAL STORAGE) E UI
+  // =======================================================================
+
+  // Funzioni UI/Calendario
+  const dayNames = ["Dom", "Lun", "Mar", "Mer", "Gio", "Ven", "Sab"];
+  const monthNames = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
+  
+  function renderCalendar() {
+    const calendarHeader = document.getElementById("calendar-header");
+    const calendarGrid = document.getElementById("calendar-grid");
+
+    calendarHeader.innerHTML = `
+      <button id="prevMonth" class="p-2 rounded-full hover:bg-white/20 transition duration-150"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg></button>
+      <span class="text-xl font-semibold">${monthNames[currentCalendarDate.getMonth()]} ${currentCalendarDate.getFullYear()}</span>
+      <button id="nextMonth" class="p-2 rounded-full hover:bg-white/20 transition duration-150"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg></button>
+    `;
+    document.getElementById("prevMonth").onclick = () => { currentCalendarDate.setMonth(currentCalendarDate.getMonth() - 1); renderCalendar(); loadMonthStatuses(); };
+    document.getElementById("nextMonth").onclick = () => { currentCalendarDate.setMonth(currentCalendarDate.getMonth() + 1); renderCalendar(); loadMonthStatuses(); };
+
+    calendarGrid.innerHTML = "";
+    dayNames.forEach(day => {
+      const cell = document.createElement("div");
+      cell.className = "text-center text-xs font-semibold text-gray-400 py-2";
+      cell.textContent = day;
+      calendarGrid.appendChild(cell);
+    });
+
+    const year = currentCalendarDate.getFullYear();
+    const month = currentCalendarDate.getMonth();
+    const firstDayOfMonth = new Date(year, month, 1);
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const startDayIndex = (firstDayOfMonth.getDay() + 6) % 7; 
+
+    for(let i = 0; i < startDayIndex; i++) {
+      const emptyCell = document.createElement("div");
+      emptyCell.className = "calendar-day";
+      calendarGrid.appendChild(emptyCell);
+    }
+
+    for(let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(year, month, day);
+      const dateId = formatDateId(date);
+      const dayCell = document.createElement("div");
+      dayCell.className = "calendar-day rounded-md m-1";
+      dayCell.textContent = day;
+      dayCell.dataset.date = dateId;
+
+      // APPLICAZIONE DEGLI STILI BASATI SULLO STATO (dopo loadMonthStatuses)
+      if (dailyStatuses[dateId] === 'complete') dayCell.classList.add("status-complete");
+      else if (dailyStatuses[dateId] === 'partial') dayCell.classList.add("status-partial");
+      
+      if (dateId === formatDateId(selectedDate)) dayCell.classList.add("selected");
+      dayCell.onclick = () => { selectDate(date); };
+      calendarGrid.appendChild(dayCell);
+    }
+  }
+
+  function updateStatus(message, type = "info") {
+    const statusElement = document.getElementById("status-message");
+    if (!statusElement) return;
+    statusElement.textContent = message;
+    statusElement.className = "text-center text-sm mt-4 p-2 rounded-lg";
+    if (type === "success") statusElement.classList.add("bg-green-100", "text-green-800");
+    else if (type === "error") statusElement.classList.add("bg-red-100", "text-red-800");
+    else statusElement.classList.add("bg-blue-100", "text-blue-800");
+  }
+
+  function selectDate(date) {
+    selectedDate = date;
+    renderCalendar();
+    document.getElementById("selected-date-display").textContent =
+      dayNames[selectedDate.getDay()] + " " +
+      selectedDate.getDate() + " " +
+      monthNames[selectedDate.getMonth()] + " " +
+      selectedDate.getFullYear();
+    loadFormFromLocalStorage(); // Corretto: era loadDailyDataFromLocalStorage()
+  }
+
+  /**
+   * Carica tutti i dati del mese corrente dal Local Storage e aggiorna gli stati.
+   */
+  function loadMonthStatuses() {
+    dailyStatuses = {};
+    const currentYear = currentCalendarDate.getFullYear();
+    const currentMonth = String(currentCalendarDate.getMonth() + 1).padStart(2, "0");
+    const currentMonthPrefix = LOCAL_STORAGE_PREFIX + currentYear + "-" + currentMonth;
+
+    try {
+        // Scorre tutte le chiavi in localStorage
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            
+            // Filtra solo le chiavi di orario per il mese corrente
+            if (key && key.startsWith(currentMonthPrefix)) {
+                const dateId = key.substring(LOCAL_STORAGE_PREFIX.length);
+                const dataString = localStorage.getItem(key);
+                let data = {};
+                
+                try {
+                    data = JSON.parse(dataString);
+                } catch (e) {
+                    console.error("Errore di parsing JSON per la chiave:", key, e);
+                    continue;
+                }
+
+                let filled = 0;
+                // Controlliamo se i 4 campi orari hanno un valore diverso da "0000"
+                ["entrataMattina", "uscitaPranzo", "entrataPomeriggio", "uscitaSera"].forEach(f => {
+                    if (data[f] && data[f] !== "0000") filled++;
+                });
+
+                // Determina lo stato e lo memorizza
+                dailyStatuses[dateId] =
+                    filled === 4 ? 'complete' : (filled > 0 ? 'partial' : 'empty');
+            }
+        }
+    } catch (e) {
+      console.error("Error loading month statuses from Local Storage:", e);
+    }
+    renderCalendar();
+  }
+  
+  /**
+   * Raccoglie i dati, convertendoli dal formato display (HH:MM) al formato di salvataggio (HHMM).
+   */
+  function collectDailyData() {
+    const data = {};
+    ["entrataMattina", "uscitaPranzo", "entrataPomeriggio", "uscitaSera"].forEach(field => {
+        const input = document.getElementById(field).value.trim();
+        // Converte sempre l'input utente (che è HH:MM o parziale) nel formato canonico HHMM per il salvataggio
+        data[field] = formatTimeInput(input);
+    });
+    return data;
+  }
+  
+  /**
+   * Carica i dati dal Local Storage e li visualizza nella form.
+   */
+  function loadFormFromLocalStorage() {
+    const dateId = formatDateId(selectedDate);
+    const key = LOCAL_STORAGE_PREFIX + dateId;
+    const dataString = localStorage.getItem(key);
+    let dailyData = {};
+
+    if (dataString) {
+        try {
+            dailyData = JSON.parse(dataString);
+        } catch (e) {
+            console.error("Errore nel parsing dei dati dal Local Storage per", dateId, e);
+            dailyData = {};
+        }
+    }
+    
+    // Inizializza la form con i dati caricati o valori di default
+    ["entrataMattina", "uscitaPranzo", "entrataPomeriggio", "uscitaSera"].forEach(field => {
+      const input = document.getElementById(field);
+      // Il Local Storage salva in HHMM (es. '0900')
+      const storedHHMM = dailyData[field] || "0000";
+      
+      // Converte per la visualizzazione utente (es. '09:00')
+      const displayValue = timeToDisplay(storedHHMM); 
+      
+      input.value = displayValue;
+      
+      // Gestione dello stile placeholder dinamico
+      if (storedHHMM === "0000") {
+          input.classList.add('italic-placeholder');
+      } else {
+          input.classList.remove('italic-placeholder');
+      }
+    });
+
+    updateDailyCalculations();
+    updateStatus("Dati caricati dal Local Storage per la data selezionata.", "info");
+  }
+
+
+  /**
+   * Implementazione robusta dei listener focus/blur per la formattazione HH:MM.
+   */
+  function addInputListeners() {
+    document.querySelectorAll(".time-input").forEach(input => {
+      
+      // 1. INPUT: Aggiorna i calcoli in tempo reale (per feedback visivo)
+      input.addEventListener("input", updateDailyCalculations);
+      
+      // 2. FOCUS: Rimuove il ':' e '0000' per facilitare la digitazione
+      input.addEventListener('focus', () => {
+        let currentValue = input.value.replace(/:/g, '');
+        if (currentValue === '0000') {
+             currentValue = '';
+        }
+        input.value = currentValue;
+        input.classList.remove('italic-placeholder');
+      });
+
+      // 3. BLUR: Formatta in HH:MM e ricalcola quando si esce dal campo
+      input.addEventListener("blur", () => {
+        const rawValue = input.value;
+        
+        // Sanitize and standardize to HHMM (e.g., '900' -> '0900')
+        const standardizedHHMM = formatTimeInput(rawValue);
+        
+        // Convert to HH:MM format for display (e.g., '09:00')
+        let displayValue = timeToDisplay(standardizedHHMM);
+        
+        // Gestione dello stile placeholder
+        if (standardizedHHMM === '0000') {
+            displayValue = '0000';
+            input.classList.add('italic-placeholder');
+        } else {
+            input.classList.remove('italic-placeholder');
+        }
+
+        // Applica il valore formattato per la visualizzazione
+        input.value = displayValue;
+        
+        // Ricalcola con il valore pulito
+        updateDailyCalculations();
+      });
+
+    });
+    document.getElementById("saveButton").onclick = saveDataToLocalStorage;
+  }
+
+  /**
+   * Salva i dati nel Local Storage.
+   */
+  function saveDataToLocalStorage() {
+    const dateId = formatDateId(selectedDate);
+    const key = LOCAL_STORAGE_PREFIX + dateId;
+    const dataToSave = collectDailyData(); 
+    
+    updateStatus("Salvataggio in corso...", "info");
+    try {
+      localStorage.setItem(key, JSON.stringify(dataToSave));
+      updateStatus("Orario per la data selezionata salvato con successo nel Local Storage!", "success");
+      
+      // Ricarica gli stati del mese per aggiornare il colore del calendario
+      loadMonthStatuses(); 
+
+    } catch (e) {
+      console.error("Errore nel salvataggio su Local Storage:", e);
+      updateStatus("Errore nel salvataggio. Controlla la console.", "error");
+    }
+  }
+
+  window.onload = function () {
+    updateStatus("Applicazione inizializzata. Dati salvati in Local Storage.");
+    renderCalendar();
+    selectDate(new Date());
+    addInputListeners();
+    loadMonthStatuses(); // Carica gli stati iniziali
+  };
+</script>
+
+</body>
+</html>
