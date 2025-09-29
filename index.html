@@ -1,823 +1,307 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Calendario Orario Giornaliero</title>
-    <!-- Carica Tailwind CSS per lo styling -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        /* Imposta il font Inter e uno sfondo generale */
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f0f4f8;
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: flex-start;
-            padding: 2rem 1rem;
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Calendario Orario Giornaliero</title>
+  <!-- TailwindCSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: Inter, sans-serif; background-color: #f0f4f8; min-height: 100vh; display: flex; justify-content: center; align-items: flex-start; padding: 2rem 1rem; }
+    .input-cell-wrapper { padding: 0; text-align: center; }
+    .time-input { width: 100%; padding: 0.5rem 0.25rem; text-align: center; border: none; background-color: transparent; font-size: 1rem; line-height: 1.25rem; border-radius: 0.375rem; outline: none; }
+    .time-input:focus { background-color: #e0f2fe; box-shadow: 0 0 0 2px #93c5fd; }
+    .time-input[value="0000"] { color: #9ca3af; font-style: italic; }
+    .calendar-day { transition: all 0.15s ease-in-out; cursor: pointer; user-select: none; height: 48px; display: flex; align-items: center; justify-content: center; color: #374151; font-weight: 500; }
+    .calendar-day:hover { background-color: #e0f2fe; transform: scale(1.05);}
+    .calendar-day.selected { background-color: #3b82f6; color: white; font-weight: bold; border-radius: 0.375rem; }
+    .calendar-day.status-partial { background-color: #fde68a; color: #92400e; font-weight: 600; }
+    .calendar-day.status-complete { background-color: #a7f3d0; color: #065f46; font-weight: 600; }
+  </style>
 
-        /* Stile generale per le celle di input (contenitori) */
-        .input-cell-wrapper {
-            padding: 0;
-            text-align: center;
-        }
+  <!-- Firebase (ES module), funziona su GitHub Pages e repo vanilla -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, setDoc, onSnapshot, getDocs, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        /* Stile per il campo di input effettivo */
-        .time-input {
-            width: 100%;
-            padding: 0.5rem 0.25rem;
-            text-align: center;
-            border: none;
-            background-color: transparent;
-            font-size: 1rem;
-            line-height: 1.25rem;
-            border-radius: 0.375rem; /* rounded-md */
-            transition: background-color 0.2s, box-shadow 0.2s;
-            outline: none;
-        }
+    // Configurazione Firebase statica
+    const firebaseConfig = {
+      apiKey: "AIzaSyBLf5rM8ex0AxlkRM-bluadFgPejb4sLyo",
+      authDomain: "orari-95dbc.firebaseapp.com",
+      projectId: "orari-95dbc",
+      storageBucket: "orari-95dbc.firebasestorage.app",
+      messagingSenderId: "296312974735",
+      appId: "1:296312974735:web:9d8631f5296ee5c93f6ffa",
+      measurementId: "G-QB58E21SDQ"
+    };
 
-        .time-input:focus {
-            background-color: #e0f2fe; /* light blue-100 */
-            box-shadow: 0 0 0 2px #93c5fd; /* focus ring blue-300 */
-        }
-        
-        /* Stile per i valori placeholder/non impostati */
-        .time-input[value="00:00"] {
-            color: #9ca3af; /* gray-400 */
-            font-style: italic;
-        }
+    // Stato programma
+    let db, auth;
+    let userId = null;
+    let isAuthReady = false;
+    let currentCalendarDate = new Date();
+    let selectedDate = new Date();
+    let dailyStatuses = {};
+    let currentEditingCellId = null;
+    let unsubscribeDailyData = null;
 
-        /* Stile specifico per le celle del calendario */
-        .calendar-day {
-            transition: all 0.15s ease-in-out;
-            cursor: pointer;
-            user-select: none;
-            height: 48px; /* altezza fissa per griglia uniforme */
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            /* Testo più scuro per i giorni di default (vuoti) */
-            color: #374151; /* gray-700, vicino al nero */
-            font-weight: 500;
-        }
+    // Utility 
+    const dayNames = ["Dom", "Lun", "Mar", "Mer", "Gio", "Ven", "Sab"];
+    const monthNames = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
+    function formatDateId(date) {
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, "0");
+      const d = String(date.getDate()).padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    }
+    function minutesToHoursString(totalMinutes) {
+      if (!totalMinutes || isNaN(totalMinutes)) return "0000";
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      return String(hours).padStart(2, "0") + String(minutes).padStart(2, "0");
+    }
+    function timeToMinutes(timeString) {
+      if (!timeString || !/^\d{4}$/.test(timeString)) return 0;
+      const hours = parseInt(timeString.substring(0,2));
+      const minutes = parseInt(timeString.substring(2,4));
+      return (hours*60 + minutes);
+    }
 
-        .calendar-day:hover {
-            background-color: #e0f2fe; /* blue-100 */
-            transform: scale(1.05);
-        }
+    // Rendering Funzioni 
+    function renderCalendar() {
+      const calendarHeader = document.getElementById("calendar-header");
+      const calendarGrid = document.getElementById("calendar-grid");
+      calendarHeader.innerHTML = `
+        <button id="prevMonth" class="p-2 rounded-full hover:bg-white/20">&lt;</button>
+        <span class="text-xl font-semibold">${monthNames[currentCalendarDate.getMonth()]} ${currentCalendarDate.getFullYear()}</span>
+        <button id="nextMonth" class="p-2 rounded-full hover:bg-white/20">&gt;</button>
+      `;
+      document.getElementById("prevMonth").onclick = () => { currentCalendarDate.setMonth(currentCalendarDate.getMonth() - 1); renderCalendar(); loadMonthStatuses(); };
+      document.getElementById("nextMonth").onclick = () => { currentCalendarDate.setMonth(currentCalendarDate.getMonth() + 1); renderCalendar(); loadMonthStatuses(); };
 
-        /* Colore per data selezionata (ha priorità) */
-        .calendar-day.selected {
-            background-color: #3b82f6; /* blue-500 */
-            color: white;
-            font-weight: bold;
-            border-radius: 0.375rem;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
-        }
-        
-        /* NUOVI STATI DI COLORE */
-        .calendar-day.status-partial {
-             background-color: #fde68a; /* yellow-200 */
-             color: #92400e; /* yellow-900 */
-             font-weight: 600;
-        }
-        
-        .calendar-day.status-partial:hover {
-             background-color: #fcd34d; /* yellow-300 */
-        }
+      calendarGrid.innerHTML = "";
+      dayNames.forEach(day => {
+        const cell = document.createElement("div");
+        cell.className = "text-center text-xs font-semibold text-gray-400 py-2";
+        cell.textContent = day;
+        calendarGrid.appendChild(cell);
+      });
+      const year = currentCalendarDate.getFullYear();
+      const month = currentCalendarDate.getMonth();
+      const firstDayOfMonth = new Date(year, month, 1);
+      const daysInMonth = new Date(year, month+1, 0).getDate();
+      const startDayIndex = (firstDayOfMonth.getDay() + 6) % 7; // start monday
 
-        .calendar-day.status-complete {
-             background-color: #a7f3d0; /* green-200 */
-             color: #065f46; /* green-800 */
-             font-weight: 600;
-        }
-        
-        .calendar-day.status-complete:hover {
-             background-color: #6ee7b7; /* green-300 */
-        }
-        
-    </style>
+      for(let i=0; i<startDayIndex; i++) {
+        const emptyCell = document.createElement("div");
+        emptyCell.className = "calendar-day";
+        calendarGrid.appendChild(emptyCell);
+      }
+      for(let day=1; day<=daysInMonth; day++) {
+        const date = new Date(year, month, day);
+        const dateId = formatDateId(date);
+        const dayCell = document.createElement("div");
+        dayCell.className = "calendar-day rounded-md m-1";
+        dayCell.textContent = day;
+        dayCell.dataset.date = dateId;
+        if (dailyStatuses[dateId] === 'complete') dayCell.classList.add("status-complete");
+        else if (dailyStatuses[dateId] === 'partial') dayCell.classList.add("status-partial");
+        if (dateId === formatDateId(selectedDate)) dayCell.classList.add("selected");
+        dayCell.onclick = () => { selectDate(date); };
+        calendarGrid.appendChild(dayCell);
+      }
+    }
 
-    <script type="module">
-        // Importazioni Firebase corrette utilizzando gli URL CDN
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot, setLogLevel, getDocs, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    function updateStatus(message, type="info") {
+      const statusElement = document.getElementById("status-message");
+      if (!statusElement) return;
+      statusElement.textContent = message;
+      statusElement.className = "text-center text-sm mt-4 p-2 rounded-lg";
+      if (type === "success") statusElement.classList.add("bg-green-100","text-green-800");
+      else if (type === "error") statusElement.classList.add("bg-red-100","text-red-800");
+      else statusElement.classList.add("bg-blue-100","text-blue-800");
+    }
 
-        // =========================================================================================
-        // CONFIGURAZIONE FIREBASE (Usa variabili di ambiente Canvas) - ORA CON GESTIONE ERRORI DI PARSING
-        // =========================================================================================
-        
-        let firebaseConfig = null;
-        try {
-            // Tentativo sicuro di parsing per catturare SyntaxError prima dell'avvio della UI
-            firebaseConfig = typeof __firebase_config !== 'undefined' && __firebase_config 
-                ? JSON.parse(__firebase_config) 
-                : null;
-        } catch (e) {
-            console.error("ERRORE DI PARSING CRITICO: La configurazione Firebase non è un JSON valido. Questo è probabilmente la causa del crash.", e);
-            // La configurazione rimane null, verrà gestita in setupFirebaseAndLoadData per visualizzare l'errore
-        }
+    // cambio data selezionata
+    function selectDate(date) {
+      selectedDate = date;
+      renderCalendar();
+      document.getElementById("selected-date-display").textContent =
+        dayNames[selectedDate.getDay()] + " " +
+        selectedDate.getDate() + " " +
+        monthNames[selectedDate.getMonth()] + " " +
+        selectedDate.getFullYear();
+      startDailyDataListener();
+    }
 
-        // Costanti Firebase fornite dall'ambiente
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-        
-        let db, auth;
-        let userId = null;
-        let isAuthReady = false;
-        
-        // Stato del Calendario (Data attualmente visualizzata nel calendario)
-        let currentCalendarDate = new Date(); // Usato per navigare mese/anno
-        
-        // Stato del Giorno Selezionato (Data attualmente in fase di modifica)
-        let selectedDate = new Date(); // Inizialmente la data odierna (per YYYY-MM-DD)
-        let unsubscribeDailyData = null; // Gestisce l'unsubscribe di Firestore
-        
-        // NUOVO STATO: Mappa degli stati (ID data -> 'complete' | 'partial' | 'empty') per il mese visualizzato
-        let dailyStatuses = {};
-
-        // Variabile per la protezione: ID dell'input attualmente in focus
-        let currentEditingCellId = null; 
-        
-        // Elementi UI
-        const statusElement = document.getElementById('status-message');
-        const dailyFormContainer = document.getElementById('daily-schedule-form');
-        const selectedDateDisplay = document.getElementById('selected-date-display');
-        const calendarHeader = document.getElementById('calendar-header');
-        const calendarGrid = document.getElementById('calendar-grid');
-
-
-        // Nomi dei giorni e dei mesi in italiano
-        const dayNames = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
-        const monthNames = [
-            'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 
-            'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
-        ];
-
-        function updateStatus(message, type = 'info') {
-            if (!statusElement) return;
-            statusElement.textContent = message;
-            statusElement.className = 'text-center text-sm mt-4 p-2 rounded-lg';
-            if (type === 'info') {
-                statusElement.classList.add('bg-blue-100', 'text-blue-800');
-            } else if (type === 'success') {
-                statusElement.classList.add('bg-green-100', 'text-green-800');
-            } else if (type === 'error') {
-                statusElement.classList.add('bg-red-100', 'text-red-800');
-            }
-        }
-        
-        /** UTILITY PER DATE E TEMPO **/
-
-        /**
-         * Formatta una data in stringa YYYY-MM-DD per Firestore ID.
-         */
-        function formatDateId(date) {
-            const y = date.getFullYear();
-            const m = String(date.getMonth() + 1).padStart(2, '0');
-            const d = String(date.getDate()).padStart(2, '0');
-            return `${y}-${m}-${d}`;
-        }
-        
-        /**
-         * Formatta e convalida l'input dell'orario (es. "9" -> "09:00", "1735" -> "17:35").
-         */
-        function formatTimeInput(input) {
-            let cleaned = input.replace(/[^0-9]/g, ''); 
-
-            if (cleaned.length === 0 || cleaned === '0') return '00:00';
-
-            // Logica di formattazione avanzata (es. 907 -> 09:07, 1555 -> 15:55)
-            if (cleaned.length < 4) {
-                 cleaned = cleaned.padStart(4, '0');
-            } else if (cleaned.length > 4) {
-                 cleaned = cleaned.substring(0, 4);
-            }
-            
-            let hours = cleaned.substring(0, 2);
-            let minutes = cleaned.substring(2, 4);
-
-            const h = Math.min(parseInt(hours, 10), 23);
-            const m = Math.min(parseInt(minutes, 10), 59);
-
-            hours = String(h).padStart(2, '0');
-            minutes = String(m).padStart(2, '0');
-            
-            if (h === 0 && m === 0) return '00:00';
-
-            return `${hours}:${minutes}`;
-        }
-        
-        // Converte una stringa oraria "HH:MM" in minuti totali
-        function timeToMinutes(timeString) {
-            if (!timeString || !timeString.includes(':')) return 0;
-            const parts = timeString.split(':');
-            const hours = parseInt(parts[0], 10) || 0;
-            const minutes = parseInt(parts[1], 10) || 0;
-            return (hours * 60) + minutes;
-        }
-
-        // Converte i minuti totali in una stringa oraria "HH:MM"
-        function minutesToHoursString(totalMinutes) {
-            if (totalMinutes < 0 || isNaN(totalMinutes)) return '00:00';
-            const hours = Math.floor(totalMinutes / 60);
-            const minutes = totalMinutes % 60;
-            
-            const formattedHours = String(hours).padStart(2, '0');
-            const formattedMinutes = String(minutes).padStart(2, '0');
-            
-            return `${formattedHours}:${formattedMinutes}`;
-        }
-        
-        /** LOGICA STATO GIORNO **/
-        
-        /**
-         * Determina lo stato di completamento di un giorno.
-         * @param {object} dailyData - I dati del giorno da Firestore.
-         * @returns {'complete' | 'partial' | 'empty'}
-         */
-        function calculateDayStatus(dailyData) {
-            const fields = ['entrataMattina', 'uscitaPranzo', 'entrataPomeriggio', 'uscitaSera'];
-            let filledCount = 0;
-
-            fields.forEach(field => {
-                const value = dailyData[field];
-                // Controlla che il valore esista e non sia il placeholder '00:00'
-                if (value && value !== '00:00') { 
-                    filledCount++;
-                }
+    // Firebase Funzioni
+    async function loadMonthStatuses() {
+      if (!isAuthReady || !userId) return;
+      dailyStatuses = {};
+      const colRef = collection(db, "artifacts", "default-app-id", "users", userId, "dailyschedule");
+      try {
+        const snapshot = await getDocs(colRef);
+        const currentMonthId = currentCalendarDate.getFullYear() + "-" + String(currentCalendarDate.getMonth() + 1).padStart(2, "0");
+        snapshot.forEach(docSnap => {
+          const dateId = docSnap.id;
+          if (dateId.startsWith(currentMonthId)) {
+            const data = docSnap.data();
+            let filled = 0;
+            ["entrataMattina", "uscitaPranzo", "entrataPomeriggio", "uscitaSera"].forEach(f => {
+              if (data[f] && data[f] !== "0000") filled++;
             });
+            dailyStatuses[dateId] =
+              filled === 4 ? 'complete' : (filled > 0 ? 'partial' : 'empty');
+          }
+        });
+      } catch { /* Nessuna azione, errori a console */ }
+      renderCalendar();
+    }
 
-            if (filledCount === fields.length) {
-                return 'complete';
-            } else if (filledCount > 0) {
-                return 'partial';
-            } else {
-                return 'empty';
-            }
-        }
-        
-        /**
-         * Carica lo stato (verde/giallo) per tutti i giorni del mese visualizzato.
-         * Popola dailyStatuses e ridisegna il calendario.
-         */
-        async function loadMonthStatuses() {
-            if (!isAuthReady || !userId) {
-                // Non procedere senza autenticazione
-                return; 
-            }
+    // <form e logica calcoli, listener...>
+    function collectDailyData() {
+      return {
+        entrataMattina: document.getElementById("entrataMattina").value.trim(),
+        uscitaPranzo: document.getElementById("uscitaPranzo").value.trim(),
+        entrataPomeriggio: document.getElementById("entrataPomeriggio").value.trim(),
+        uscitaSera: document.getElementById("uscitaSera").value.trim()
+      };
+    }
 
-            dailyStatuses = {}; 
-            
-            const colRef = collection(db, 'artifacts', appId, 'users', userId, 'daily_schedule');
+    function updateDailyCalculations() {
+      const tstartm = document.getElementById("entrataMattina").value.trim();
+      const tendm = document.getElementById("uscitaPranzo").value.trim();
+      const tstartp = document.getElementById("entrataPomeriggio").value.trim();
+      const tendp = document.getElementById("uscitaSera").value.trim();
+      let morningDuration = Math.max(0, timeToMinutes(tendm) - timeToMinutes(tstartm));
+      let afternoonDuration = Math.max(0, timeToMinutes(tendp) - timeToMinutes(tstartp));
+      let breakDuration = Math.max(0, timeToMinutes(tstartp) - timeToMinutes(tendm));
+      let totalDuration = morningDuration + afternoonDuration;
+      document.getElementById("totalHours").textContent = minutesToHoursString(totalDuration);
+      document.getElementById("pausaPranzo").textContent = minutesToHoursString(breakDuration);
+      // Uscita teorica base: rientro + minuti restanti
+      let mtheoreticalstartp = Math.max(timeToMinutes(tendm) + 60, timeToMinutes(tstartp));
+      let minutesNeededAfternoon = 480 - morningDuration;
+      let uscitaTeoricaVal = (mtheoreticalstartp > 0) ? mtheoreticalstartp + minutesNeededAfternoon : 0;
+      document.getElementById("uscitaTeorica").textContent = minutesToHoursString(uscitaTeoricaVal);
+    }
 
-            try {
-                // Ottieni tutti i documenti nella collezione (filtriamo in memoria)
-                const snapshot = await getDocs(colRef);
-                
-                const currentMonthId = currentCalendarDate.getFullYear() + '-' + String(currentCalendarDate.getMonth() + 1).padStart(2, '0');
-                
-                snapshot.forEach(docSnap => {
-                    const dateId = docSnap.id; // YYYY-MM-DD
-                    
-                    // Filtra solo per il mese attualmente visualizzato
-                    if (dateId.startsWith(currentMonthId)) {
-                         const data = docSnap.data();
-                         dailyStatuses[dateId] = calculateDayStatus(data);
-                    }
-                });
+    function loadFormFromFirestore(dailyData = {}) {
+      ["entrataMattina", "uscitaPranzo", "entrataPomeriggio", "uscitaSera"].forEach(field => {
+        const input = document.getElementById(field);
+        input.value = dailyData[field] || "0000";
+      });
+      updateDailyCalculations();
+      updateStatus("Dati caricati per la data selezionata.", "success");
+    }
 
-                // Ridisegna il calendario con i nuovi stati colorati
-                renderCalendar(); 
+    function addInputListeners() {
+      document.querySelectorAll(".time-input").forEach(input => {
+        input.addEventListener("input", updateDailyCalculations);
+      });
+      document.getElementById("saveButton").onclick = saveDataToFirestore;
+    }
 
-            } catch (e) {
-                console.error("Errore durante il caricamento degli stati mensili: ", e);
-            }
-        }
+    // Listener Firestore giorno selezionato
+    function startDailyDataListener() {
+      if (!isAuthReady || !userId) return;
+      if (unsubscribeDailyData) unsubscribeDailyData();
+      const dateId = formatDateId(selectedDate);
+      const docRef = doc(db, "artifacts", "default-app-id", "users", userId, "dailyschedule", dateId);
+      unsubscribeDailyData = onSnapshot(docRef, (docSnap) => {
+        if (docSnap.exists()) loadFormFromFirestore(docSnap.data());
+        else loadFormFromFirestore({});
+      });
+    }
 
+    async function saveDataToFirestore() {
+      if (!isAuthReady || !userId) return;
+      const dateId = formatDateId(selectedDate);
+      const docRef = doc(db, "artifacts", "default-app-id", "users", userId, "dailyschedule", dateId);
+      updateStatus("Salvataggio in corso...", "info");
+      try {
+        await setDoc(docRef, collectDailyData());
+        updateStatus("Orario per la data selezionata salvato con successo!", "success");
+        loadMonthStatuses();
+      } catch (e) {
+        updateStatus("Errore nel salvataggio manuale.", "error");
+      }
+    }
 
-        /** LOGICA CALENDARIO **/
-
-        function renderCalendar() {
-            calendarHeader.innerHTML = `
-                <button id="prevMonth" class="p-2 rounded-full hover:bg-white/20 transition duration-150">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
-                </button>
-                <span class="text-xl font-semibold">${monthNames[currentCalendarDate.getMonth()]} ${currentCalendarDate.getFullYear()}</span>
-                <button id="nextMonth" class="p-2 rounded-full hover:bg-white/20 transition duration-150">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
-                </button>
-            `;
-
-            // Aggiungi listener per la navigazione
-            document.getElementById('prevMonth').addEventListener('click', () => {
-                currentCalendarDate.setMonth(currentCalendarDate.getMonth() - 1);
-                renderCalendar();
-                loadMonthStatuses(); // Carica gli stati per il nuovo mese
-            });
-            document.getElementById('nextMonth').addEventListener('click', () => {
-                currentCalendarDate.setMonth(currentCalendarDate.getMonth() + 1);
-                renderCalendar();
-                loadMonthStatuses(); // Carica gli stati per il nuovo mese
-            });
-
-            calendarGrid.innerHTML = '';
-            
-            // Intestazioni dei giorni della settimana
-            dayNames.forEach(day => {
-                const dayHeader = document.createElement('div');
-                // Colore giorno settimana (grigio chiaro: text-gray-400)
-                dayHeader.className = 'text-center text-xs font-semibold text-gray-400 py-2';
-                dayHeader.textContent = day;
-                calendarGrid.appendChild(dayHeader);
-            });
-
-            const year = currentCalendarDate.getFullYear();
-            const month = currentCalendarDate.getMonth();
-            const firstDayOfMonth = new Date(year, month, 1);
-            const daysInMonth = new Date(year, month + 1, 0).getDate();
-            const startDayIndex = (firstDayOfMonth.getDay() + 6) % 7; // Inizio Lunedì (0) - Domenica (6)
-
-            // Giorni vuoti all'inizio del mese
-            for (let i = 0; i < startDayIndex; i++) {
-                const emptyCell = document.createElement('div');
-                emptyCell.className = 'calendar-day';
-                calendarGrid.appendChild(emptyCell);
-            }
-
-            // Giorni del mese
-            for (let day = 1; day <= daysInMonth; day++) {
-                const date = new Date(year, month, day);
-                const dateId = formatDateId(date);
-                const dayCell = document.createElement('div');
-                dayCell.className = 'calendar-day rounded-md m-1 transition duration-150';
-                dayCell.textContent = day;
-                dayCell.dataset.date = dateId;
-                
-                // --- APPLICAZIONE STATO DEL GIORNO ---
-                const status = dailyStatuses[dateId];
-                if (status === 'complete') {
-                    dayCell.classList.add('status-complete');
-                    dayCell.title = "Orario Completo (Verde)";
-                } else if (status === 'partial') {
-                    dayCell.classList.add('status-partial');
-                    dayCell.title = "Orario Parziale (Giallo)";
-                }
-                // --- FINE APPLICAZIONE STATO ---
-
-                // Evidenzia la data selezionata (ha la priorità visiva)
-                if (dateId === formatDateId(selectedDate)) {
-                    dayCell.classList.add('selected');
-                }
-
-                dayCell.addEventListener('click', () => {
-                    selectDate(date);
-                });
-
-                calendarGrid.appendChild(dayCell);
-            }
-        }
-        
-        /**
-         * Seleziona una data, aggiorna lo stato e ricarica il form con i dati.
-         */
-        function selectDate(date) {
-            selectedDate = date;
-            
-            // Rimuovi la selezione precedente e aggiungi la nuova
-            document.querySelectorAll('.calendar-day').forEach(cell => {
-                cell.classList.remove('selected');
-                if (cell.dataset.date === formatDateId(selectedDate)) {
-                    cell.classList.add('selected');
-                }
-            });
-
-            // Aggiorna l'intestazione del form
-            selectedDateDisplay.textContent = `${dayNames[selectedDate.getDay()]} ${selectedDate.getDate()} ${monthNames[selectedDate.getMonth()]} ${selectedDate.getFullYear()}`;
-            
-            // Avvia l'ascolto dei dati per la nuova data
-            startDailyDataListener();
-        }
-
-
-        /** LOGICA CALCOLI GIORNALIERI **/
-
-        const TARGET_MINUTES = 480; // 8 ore esatte (8 * 60)
-        const MIN_MANDATORY_BREAK = 60; // Minimo 1 ora di pausa
-
-        /**
-         * Calcola e aggiorna il totale delle ore, la pausa pranzo e l'uscita teorica.
-         */
-        function updateDailyCalculations() {
-            // Raccoglie i valori dai campi INPUT UTENTE
-            const t_start_m = document.getElementById('entrataMattina').value.trim();
-            const t_end_m = document.getElementById('uscitaPranzo').value.trim();
-            const t_start_p = document.getElementById('entrataPomeriggio').value.trim();
-            const t_end_p = document.getElementById('uscitaSera').value.trim();
-            
-            // Elementi di output
-            const totalCell = document.getElementById('totalHours');
-            const pauseCell = document.getElementById('pausaPranzo');
-            const theoreticalExitCell = document.getElementById('uscitaTeorica');
-
-            // Conversione in minuti
-            const m_start_m = timeToMinutes(t_start_m);
-            const m_end_m = timeToMinutes(t_end_m);
-            const m_start_p = timeToMinutes(t_start_p);
-            const m_end_p = timeToMinutes(t_end_p);
-
-            // 1. Calcolo Durata Pausa (REALE)
-            let breakDurationMinutes = 0;
-            if (m_start_p > m_end_m && m_end_m > 0) {
-                breakDurationMinutes = m_start_p - m_end_m;
-            }
-
-            // Aggiorna la cella Pausa Pranzo con la durata REALE e applica styling condizionale
-            if (pauseCell) {
-                pauseCell.textContent = minutesToHoursString(breakDurationMinutes);
-                
-                pauseCell.classList.remove('bg-red-200', 'text-red-800', 'font-extrabold', 'bg-blue-50', 'text-gray-700', 'font-semibold'); 
-
-                if (breakDurationMinutes > 0 && breakDurationMinutes < MIN_MANDATORY_BREAK) {
-                    pauseCell.classList.add('bg-red-200', 'text-red-800', 'font-extrabold');
-                    pauseCell.title = `Pausa di ${minutesToHoursString(breakDurationMinutes)}. ATTENZIONE: Pausa MINIMA (1:00) non rispettata!`;
-                } else if (breakDurationMinutes > 0) {
-                     pauseCell.classList.add('bg-blue-50', 'text-gray-700', 'font-semibold');
-                     pauseCell.title = `Pausa valida: ${minutesToHoursString(breakDurationMinutes)}`;
-                } else {
-                    pauseCell.classList.add('bg-blue-50', 'text-gray-700', 'font-semibold');
-                    pauseCell.title = 'Nessuna pausa registrata.';
-                }
-            }
-
-
-            // 2. Calcolo Durate Lavorative e Totale
-            let morningDuration = 0;
-            if (m_end_m > m_start_m) {
-                morningDuration = m_end_m - m_start_m;
-            }
-
-            let afternoonDuration = 0;
-            if (m_end_p > m_start_p && m_start_p > 0) {
-                afternoonDuration = m_end_p - m_start_p;
-            }
-
-            const totalDurationMinutes = morningDuration + afternoonDuration;
-            
-            if (totalCell) {
-                totalCell.textContent = minutesToHoursString(totalDurationMinutes);
-                totalCell.title = `Mattina: ${minutesToHoursString(morningDuration)}, Pomeriggio: ${minutesToHoursString(afternoonDuration)}`;
-            }
-
-            // 3. Calcolo Uscita Teorica (Pausa minima 60 min)
-            let theoreticalExitString = '00:00';
-            const minutesNeededAfternoon = TARGET_MINUTES - morningDuration;
-            
-            let m_theoretical_start_p = 0;
-            const m_min_start_p = m_end_m + MIN_MANDATORY_BREAK; // Orario minimo di rientro (Uscita Pranzo + 60 min)
-
-            if (m_end_m > 0) {
-                // Caso A: L'utente ha inserito l'entrata e la pausa è valida (>= 60 min)
-                if (m_start_p > 0 && breakDurationMinutes >= MIN_MANDATORY_BREAK) {
-                    m_theoretical_start_p = m_start_p; 
-                // Caso B: L'utente ha inserito l'entrata ma la pausa non è valida (< 60 min)
-                } else if (m_start_p > 0 && breakDurationMinutes < MIN_MANDATORY_BREAK) {
-                    m_theoretical_start_p = m_min_start_p;
-                // Caso C: L'utente non ha inserito il rientro, ma ha un'uscita pranzo
-                } else if (m_start_p === 0) {
-                     m_theoretical_start_p = m_min_start_p;
-                }
-            }
-
-
-            if (m_theoretical_start_p > 0 && minutesNeededAfternoon > 0) {
-                const theoreticalExitMinutes = m_theoretical_start_p + minutesNeededAfternoon;
-                
-                if (theoreticalExitMinutes < (24 * 60)) {
-                    theoreticalExitString = minutesToHoursString(theoreticalExitMinutes);
-                } else {
-                    theoreticalExitString = '>>24:00'; 
-                }
-            } else if (m_end_m > 0 && minutesNeededAfternoon <= 0) {
-                theoreticalExitString = 'Raggiunte';
-            }
-
-
-            if (theoreticalExitCell) {
-                theoreticalExitCell.textContent = theoreticalExitString;
-            }
-        }
-        
-        /** LOGICA FIRESTORE E UI **/
-        
-        /**
-         * Raccoglie i dati del giorno correntemente selezionato.
-         */
-        function collectDailyData() {
-            const data = {};
-            // Recupera i campi input UTENTE
-            data['entrataMattina'] = document.getElementById('entrataMattina').value.trim();
-            data['uscitaPranzo'] = document.getElementById('uscitaPranzo').value.trim();
-            data['entrataPomeriggio'] = document.getElementById('entrataPomeriggio').value.trim();
-            data['uscitaSera'] = document.getElementById('uscitaSera').value.trim();
-            
-            return data;
-        }
-
-        // Funzione per popolare il form con i dati dal database
-        function loadFormFromFirestore(dailyData) {
-            const fields = ['entrataMattina', 'uscitaPranzo', 'entrataPomeriggio', 'uscitaSera'];
-            
-            fields.forEach(field => {
-                const input = document.getElementById(field);
-                if (input) {
-                    const cellId = field; // ID = nome del campo per il form giornaliero
-
-                    // IGNORA L'AGGIORNAMENTO IN TEMPO REALE SE LA CELLA È ATTUALMENTE IN FASE DI MODIFICA
-                    if (cellId === currentEditingCellId) {
-                        return; 
-                    }
-                    
-                    const savedValue = dailyData[field] || '00:00';
-                    input.value = savedValue; 
-                }
-            });
-            
-            // RICALCOLA DOPO AVER CARICATO I DATI
-            updateDailyCalculations();
-            updateStatus(`Dati caricati per il ${selectedDateDisplay.textContent}.`, 'success');
-        }
-        
-        /**
-         * Avvia l'ascolto in tempo reale per la data correntemente selezionata.
-         */
-        function startDailyDataListener() {
-            if (unsubscribeDailyData) {
-                unsubscribeDailyData(); // Ferma l'ascolto precedente
-            }
-
-            if (!isAuthReady || !userId) {
-                updateStatus('Errore: Autenticazione non completa. Impossibile caricare i dati.', 'error');
-                return;
-            }
-            
-            const dateId = formatDateId(selectedDate);
-            const docRef = doc(db, 'artifacts', appId, 'users', userId, 'daily_schedule', dateId);
-            
-            updateStatus(`Caricamento dati per la data: ${dateId}...`, 'info');
-
-            // Imposta il nuovo listener
-            unsubscribeDailyData = onSnapshot(docRef, (docSnap) => {
-                const dailyData = docSnap.exists() ? docSnap.data() : {};
-                loadFormFromFirestore(dailyData);
-                
-                // Dopo il salvataggio o il caricamento, aggiorna lo stato del mese
-                loadMonthStatuses(); 
-                
-            }, (error) => {
-                console.error("Errore onSnapshot: ", error);
-                updateStatus('Errore nel caricamento in tempo reale. Controlla la console.', 'error');
-            });
-        }
-
-
-        /**
-         * Salva i dati giornalieri su Firestore, attivato dal bottone.
-         */
-        async function saveDataToFirestore() {
-            if (!isAuthReady || !userId) {
-                updateStatus('Errore: Autenticazione non completa. Impossibile salvare.', 'error');
-                return;
-            }
-            
-            const dateId = formatDateId(selectedDate);
-            const dailyData = collectDailyData();
-            
-            const docRef = doc(db, 'artifacts', appId, 'users', userId, 'daily_schedule', dateId);
-            updateStatus('Salvataggio in corso...', 'info');
-
-            try {
-                // Sovrascrive il documento daily_schedule/{dateId}
-                await setDoc(docRef, dailyData);
-                
-                updateStatus(`Orario per il ${selectedDateDisplay.textContent} salvato con successo!`, 'success');
-                
-                // Il listener onSnapshot ora gestisce l'aggiornamento del calendario
-                
-            } catch (e) {
-                console.error("Errore durante il salvataggio manuale: ", e);
-                updateStatus('Errore di salvataggio manuale. Controlla la console.', 'error');
-            }
-        }
-
-        // Funzione principale per inizializzare Firebase e caricare i dati
-        async function setupFirebaseAndLoadData() {
-            setLogLevel('debug');
-
-            // 1. Verifica che la configurazione Firebase sia stata caricata e sia valida
-            if (!firebaseConfig) {
-                console.error("ERRORE DI CONFIGURAZIONE CRITICO: La variabile __firebase_config è assente o non è stata parsata correttamente. La configurazione non è disponibile.");
-                updateStatus('ERRORE CRITICO: Configurazione database non trovata. Impossibile avviare Firebase.', 'error');
-                return;
-            }
-            if (!firebaseConfig.apiKey) {
-                 console.error("ERRORE DI CONFIGURAZIONE: Configurazione Firebase incompleta. Manca la chiave API (apiKey). Controlla la console per vedere la configurazione parziale.", firebaseConfig);
-                 updateStatus('ERRORE CRITICO: Configurazione database incompleta (manca apiKey).', 'error');
-                 return;
-            }
-
-
-            try {
-                // Inizializzazione Firebase
-                const app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                auth = getAuth(app);
-                
-                // 2. Inizializza il calendario e seleziona la data odierna
-                currentCalendarDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
-                renderCalendar(); 
-                selectDate(selectedDate); // Innesca il primo caricamento dati
-                
-                // 3. Autenticazione e Listener
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    // Poiché non c'è token, si fa l'accesso anonimo, che è necessario per Firestore.
-                    await signInAnonymously(auth);
-                }
-
-                onAuthStateChanged(auth, (user) => {
-                    if (user) {
-                        userId = user.uid;
-                        isAuthReady = true;
-                        // Mostra l'ID utente (o un messaggio di successo)
-                        updateStatus(`Connesso al database. ID Utente: ${userId.substring(0, 8)}... Caricamento dati...`, 'info');
-                        
-                        // Riavvia l'ascolto per il giorno selezionato e carica gli stati del mese
-                        startDailyDataListener(); 
-                        loadMonthStatuses();
-
-                    } else {
-                        isAuthReady = false;
-                        userId = null;
-                        updateStatus('Autenticazione fallita o disconnessa.', 'error');
-                    }
-                });
-
-                // 4. Aggiungi i listener per l'editing (focus/blur) ai campi INPUT del form giornaliero
-                document.querySelectorAll('.time-input').forEach(input => {
-                    
-                    input.addEventListener('focus', () => {
-                         // IMPOSTA L'ID DELLA CELLA IN EDITING (protezione)
-                         currentEditingCellId = input.id; 
-                         
-                         // Rimuove il "00:00" quando si inizia a scrivere
-                         if (input.value.trim() === '00:00') {
-                            input.value = '';
-                         }
-                    });
-
-                    input.addEventListener('blur', () => {
-                        const cellId = input.id; 
-                        
-                        // 1. FORMATTAZIONE E PULIZIA DELL'INPUT
-                        const rawTime = input.value;
-                        let formattedTime = formatTimeInput(rawTime); 
-                        
-                        // 2. Aggiorna immediatamente il valore formattato nell'input
-                        input.value = formattedTime;
-
-                        // Rimuovi la protezione immediatamente
-                        if (currentEditingCellId === cellId) {
-                             currentEditingCellId = null; 
-                        }
-
-                        // RICHIAMA IL CALCOLO DOPO LA MODIFICA
-                        updateDailyCalculations(); 
-                    });
-                });
-
-                // 5. Aggiungi il listener per il pulsante Salva
-                const saveButton = document.getElementById('saveButton');
-                if (saveButton) {
-                    saveButton.addEventListener('click', saveDataToFirestore);
-                }
-
-
-            } catch (e) {
-                // Questo catch ora gestirà errori di inizializzazione di Firebase
-                console.error("Errore di inizializzazione Firebase:", e);
-                // Diamo un messaggio più specifico all'utente
-                updateStatus(`Errore CRITICO all'avvio: ${e.message || 'Errore sconosciuto. Controlla la console.'}`, 'error');
-            }
-        }
-
-        window.onload = setupFirebaseAndLoadData;
-
-    </script>
+    // Avvio
+    window.onload = async function() {
+      try {
+        const app = initializeApp(firebaseConfig);
+        db = getFirestore(app);
+        auth = getAuth(app);
+        await signInAnonymously(auth);
+        onAuthStateChanged(auth, function(user) {
+          if (user) {
+            userId = user.uid;
+            isAuthReady = true;
+            updateStatus("Connesso al database. ID utente: " + userId.substring(0,8), "success");
+            renderCalendar();
+            selectDate(new Date());
+            addInputListeners();
+            loadMonthStatuses();
+          }
+        });
+      } catch (e) {
+        updateStatus("ERRORE CRITICO: " + (e.message || "Init error."), "error");
+      }
+    }
+  </script>
 </head>
 <body>
-
-    <div class="w-full max-w-4xl p-6 bg-white shadow-2xl rounded-xl border border-blue-100">
-        <h1 class="text-3xl font-extrabold text-gray-800 mb-6 text-center border-b-2 pb-3 border-blue-200">
-            Calendario Orario Giornaliero
-        </h1>
-        
-        <!-- Elemento per i messaggi di stato/caricamento -->
-        <div id="status-message" class="text-center text-sm mb-4 p-2 rounded-lg bg-blue-50 text-blue-800">
-            Inizializzazione del sistema...
-        </div>
-
-        <!-- SEZIONE CALENDARIO -->
-        <div class="mb-8 p-4 bg-blue-600 text-white rounded-xl shadow-lg">
-            <!-- Header Navigazione Mese -->
-            <div id="calendar-header" class="flex justify-between items-center mb-4">
-                <!-- Contenuto generato via JS -->
-            </div>
-
-            <!-- Griglia Giorni della Settimana + Numeri -->
-            <div id="calendar-grid" class="grid grid-cols-7 gap-1 text-center">
-                <!-- Giorni della settimana e numeri generati via JS -->
-            </div>
-        </div>
-
-        <!-- SEZIONE INSERIMENTO ORARI PER LA DATA SELEZIONATA -->
-        <div id="daily-schedule-form" class="p-6 border border-gray-200 rounded-xl bg-gray-50 shadow-inner">
-            
-            <h2 class="text-2xl font-bold text-gray-700 mb-4 text-center">
-                Orario per: <span id="selected-date-display" class="text-blue-600">Oggi</span>
-            </h2>
-
-            <!-- Tabella Dettaglio Orari -->
-            <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-300">
-                    <thead class="bg-blue-100/50">
-                        <tr>
-                            <th scope="col" class="px-3 py-3 text-center text-sm font-medium text-gray-700">Campo</th>
-                            <th scope="col" class="px-3 py-3 text-center text-sm font-medium text-gray-700">Valore</th>
-                            <th scope="col" class="px-3 py-3 text-center text-sm font-medium text-gray-700 bg-blue-200/50">Risultato Calcolato</th>
-                        </tr>
-                    </thead>
-                    <tbody class="bg-white divide-y divide-gray-200">
-                        
-                        <!-- Entrata Mattina -->
-                        <tr class="hover:bg-gray-50">
-                            <td class="px-3 py-3 text-sm font-medium text-gray-900">Entrata (Mattina)</td>
-                            <td class="input-cell-wrapper border-l border-r border-gray-200">
-                                <input type="text" id="entrataMattina" class="time-input" value="00:00">
-                            </td>
-                            <td class="bg-transparent"></td>
-                        </tr>
-
-                        <!-- Uscita Pranzo -->
-                        <tr class="hover:bg-gray-50">
-                            <td class="px-3 py-3 text-sm font-medium text-gray-900">Uscita (Pranzo)</td>
-                            <td class="input-cell-wrapper border-l border-r border-gray-200">
-                                <input type="text" id="uscitaPranzo" class="time-input" value="00:00">
-                            </td>
-                            <td id="pausaPranzo" class="px-3 py-3 text-sm font-semibold text-gray-700 bg-blue-50 text-center" title="Durata Pausa">
-                                00:00
-                            </td>
-                        </tr>
-
-                        <!-- Entrata Pomeriggio -->
-                        <tr class="hover:bg-gray-50">
-                            <td class="px-3 py-3 text-sm font-medium text-gray-900">Entrata (Pomeriggio)</td>
-                            <td class="input-cell-wrapper border-l border-r border-gray-200">
-                                <input type="text" id="entrataPomeriggio" class="time-input" value="00:00">
-                            </td>
-                            <td id="uscitaTeorica" class="px-3 py-3 text-sm font-bold text-purple-700 bg-purple-100 text-center" title="Uscita richiesta per totalizzare 8 ore (con 1:00 min di pausa)">
-                                00:00
-                            </td>
-                        </tr>
-                        
-                        <!-- Uscita Sera -->
-                        <tr class="hover:bg-gray-50">
-                            <td class="px-3 py-3 text-sm font-medium text-gray-900">Uscita (Sera)</td>
-                            <td class="input-cell-wrapper border-l border-r border-gray-200">
-                                <input type="text" id="uscitaSera" class="time-input" value="00:00">
-                            </td>
-                            <td id="totalHours" class="px-3 py-3 text-sm font-extrabold text-green-700 bg-green-100 text-center" title="Totale ore lavorate (Mattina + Pomeriggio)">
-                                00:00
-                            </td>
-                        </tr>
-
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- Pulsante Salva -->
-            <div class="flex justify-center mt-6">
-                <button id="saveButton" class="px-6 py-3 bg-green-600 text-white font-semibold rounded-lg shadow-xl hover:bg-green-700 transition duration-150 ease-in-out focus:outline-none focus:ring-4 focus:ring-green-500/50">
-                    Salva Orario per questa Data
-                </button>
-            </div>
-            
-        </div>
+  <div class="w-full max-w-4xl p-6 bg-white shadow-2xl rounded-xl border border-blue-100">
+    <h1 class="text-3xl font-extrabold text-gray-800 mb-6 text-center border-b-2 pb-3 border-blue-200">Calendario Orario Giornaliero</h1>
+    <div id="status-message" class="text-center text-sm mb-4 p-2 rounded-lg bg-blue-50 text-blue-800">Inizializzazione del sistema...</div>
+    <div class="mb-8 p-4 bg-blue-600 text-white rounded-xl shadow-lg">
+      <div id="calendar-header" class="flex justify-between items-center mb-4"></div>
+      <div id="calendar-grid" class="grid grid-cols-7 gap-1 text-center"></div>
     </div>
-
+    <div id="daily-schedule-form" class="p-6 border border-gray-200 rounded-xl bg-gray-50 shadow-inner">
+      <h2 class="text-2xl font-bold text-gray-700 mb-4 text-center">Orario per <span id="selected-date-display" class="text-blue-600">Oggi</span></h2>
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-300">
+          <thead class="bg-blue-100/50">
+            <tr>
+              <th class="px-3 py-3 text-center text-sm font-medium text-gray-700">Campo</th>
+              <th class="px-3 py-3 text-center text-sm font-medium text-gray-700">Valore</th>
+              <th class="px-3 py-3 text-center text-sm font-medium text-gray-700 bg-blue-200/50">Risultato Calcolato</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            <tr class="hover:bg-gray-50">
+              <td class="px-3 py-3 text-sm font-medium text-gray-900">Entrata Mattina</td>
+              <td class="input-cell-wrapper border-l border-r border-gray-200"><input type="text" id="entrataMattina" class="time-input" value="0000"></td>
+              <td class="bg-transparent"></td>
+            </tr>
+            <tr class="hover:bg-gray-50">
+              <td class="px-3 py-3 text-sm font-medium text-gray-900">Uscita Pranzo</td>
+              <td class="input-cell-wrapper border-l border-r border-gray-200"><input type="text" id="uscitaPranzo" class="time-input" value="0000"></td>
+              <td id="pausaPranzo" class="px-3 py-3 text-sm font-semibold text-gray-700 bg-blue-50 text-center" title="Durata Pausa">0000</td>
+            </tr>
+            <tr class="hover:bg-gray-50">
+              <td class="px-3 py-3 text-sm font-medium text-gray-900">Entrata Pomeriggio</td>
+              <td class="input-cell-wrapper border-l border-r border-gray-200"><input type="text" id="entrataPomeriggio" class="time-input" value="0000"></td>
+              <td id="uscitaTeorica" class="px-3 py-3 text-sm font-bold text-purple-700 bg-purple-100 text-center" title="Uscita richiesta per totalizzare 8 ore con 100 min di pausa">0000</td>
+            </tr>
+            <tr class="hover:bg-gray-50">
+              <td class="px-3 py-3 text-sm font-medium text-gray-900">Uscita Sera</td>
+              <td class="input-cell-wrapper border-l border-r border-gray-200"><input type="text" id="uscitaSera" class="time-input" value="0000"></td>
+              <td id="totalHours" class="px-3 py-3 text-sm font-extrabold text-green-700 bg-green-100 text-center" title="Totale ore lavorate (Mattina + Pomeriggio)">0000</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="flex justify-center mt-6">
+        <button id="saveButton" class="px-6 py-3 bg-green-600 text-white font-semibold rounded-lg shadow-xl hover:bg-green-700 transition duration-150 ease-in-out focus:outline-none focus:ring-4 focus:ring-green-500/50">
+          Salva Orario per questa Data
+        </button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
