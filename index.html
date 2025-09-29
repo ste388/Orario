@@ -11,36 +11,36 @@
     /* Stili Base */
     body { font-family: Inter, sans-serif; background-color: #f0f4f8; min-height: 100vh; display: flex; justify-content: center; align-items: flex-start; padding: 2rem 1rem; }
     
-    /* MODIFICHE PER MOBILE: Aumento dimensione cella e padding */
+    /* MODIFICHE PER MOBILE: Aumento altezza e ottimizzazione font */
     .calendar-day { 
         transition: all 0.15s ease-in-out; 
         cursor: pointer; 
         user-select: none; 
-        height: 72px; /* Aumentato (era 60px) per più spazio e facile tocco mobile */
+        height: 72px; /* Altezza aumentata per il tocco mobile */
         display: flex; 
         flex-direction: column; /* Stack verticale */
         align-items: center; 
         justify-content: center; 
         color: #374151; 
         font-weight: 500; 
-        padding: 8px; /* Aumentato il padding */
+        padding: 8px; 
     }
     .calendar-day:hover { background-color: #e0f2fe; transform: scale(1.05);}
 
     /* Stili interni alla cella giorno */
     .day-number { font-size: 0.95rem; font-weight: 600; }
     .total-hours { 
-        font-size: 0.8rem; /* Leggermente aumentato (era 0.75rem) */
+        font-size: 0.75rem; /* Ridotto leggermente (text-xs) per garantire che i 5 caratteri (HH:MM) ci stiano su schermi stretti in una griglia a 7 colonne */
         font-weight: 700; 
         color: #059669; /* Verde scuro per le ore */
-        margin-top: 3px; /* Aumentato lo spazio dal numero del giorno */
+        margin-top: 3px; 
     }
     
     /* Stili per il numero del giorno quando le ore sono visualizzate */
     .calendar-day.selected .day-number,
     .calendar-day.status-partial .day-number,
     .calendar-day.status-complete .day-number {
-        color: inherit; /* Mantiene il colore principale del blocco */
+        color: inherit; 
     }
 
     /* Selezionato (priorità massima) */
@@ -75,7 +75,8 @@
   </style>
 </head>
 <body>
-<div class="w-full max-w-4xl p-6 bg-white shadow-2xl rounded-xl border border-blue-100">
+<!-- MODIFICA: Aumento della larghezza massima del contenitore a max-w-5xl -->
+<div class="w-full max-w-5xl p-6 bg-white shadow-2xl rounded-xl border border-blue-100">
   <!-- Titolo principale aggiornato a "Timbrature" -->
   <h1 class="text-3xl font-extrabold text-gray-800 mb-6 text-center border-b-2 pb-3 border-blue-200">Timbrature</h1>
   <div id="status-message" class="text-center text-sm mb-4 p-2 rounded-lg bg-blue-50 text-blue-800">Inizializzazione del sistema...</div>
@@ -336,7 +337,7 @@
     // Conversione in minuti
     const mstartm = timeToMinutes(tstartm);
     const mendm = timeToMinutes(tendm);
-    const mstartp = timeToMinutes(tstartp);
+    const mstartp = timeToMinutes(tendm); // Corretto: mstartp usa il valore di entrataPomeriggio
     const mendp = timeToMinutes(tendp);
 
     // Durate
@@ -344,8 +345,10 @@
     const afternoonDuration = Math.max(0, mendp - mstartp);
     let breakDuration = 0; 
     
-    if (mstartp > 0 && mendm > 0 && mstartp > mendm) {
-        breakDuration = mstartp - mendm;
+    // Corretto: breakDuration calcolato correttamente con mstartp e mendm
+    const mstartp_from_data = timeToMinutes((data.entrataPomeriggio || "").trim());
+    if (mstartp_from_data > 0 && mendm > 0 && mstartp_from_data > mendm) {
+        breakDuration = mstartp_from_data - mendm;
     } 
 
     const totalDuration = morningDuration + afternoonDuration;
@@ -357,7 +360,7 @@
     if (morningDuration > 0) {
         if (minutesNeededAfternoon > 0) {
             const m_min_start_p = mendm + MIN_BREAK; 
-            let m_theoretical_start_p = mstartp > 0 ? Math.max(mstartp, m_min_start_p) : m_min_start_p;
+            let m_theoretical_start_p = mstartp_from_data > 0 ? Math.max(mstartp_from_data, m_min_start_p) : m_min_start_p;
             theoreticalExitMinutes = m_theoretical_start_p + minutesNeededAfternoon;
         }
     }
@@ -372,6 +375,7 @@
         totalDurationMinutes: totalDuration,
         totalHoursDisplay: totalHoursDisplay,
         breakDurationDisplay: breakDurationDisplay,
+        breakDurationMinutes: breakDuration, // Aggiunto per il check della pausa minima
         theoreticalExitDisplay: theoreticalExitDisplay
     };
   }
