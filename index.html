@@ -18,19 +18,19 @@
         gap: 2px;
     }
 
-    /* Stili per le celle giorno L-V */
+    /* Stili per le celle giorno L-V (RIDIMENSIONATE PER MOBILE) */
     .calendar-day { 
         transition: all 0.15s ease-in-out; 
         cursor: pointer; 
         user-select: none; 
-        height: 80px; /* Altezza aumentata per il tocco mobile */
+        height: 65px; /* Altezza ridotta */
         display: flex; 
         flex-direction: column; 
         align-items: center; 
         justify-content: center; 
         color: #374151; 
         font-weight: 500; 
-        padding: 8px; 
+        padding: 4px; /* Padding ridotto */
         background-color: #f8fafc; /* Sfondo chiaro */
         border: 1px solid #e2e8f0;
     }
@@ -40,14 +40,14 @@
 
     .calendar-day:hover { background-color: #e0f2fe; transform: scale(1.02); }
 
-    /* Stili interni alla cella giorno */
-    .day-number { font-size: 0.95rem; font-weight: 600; }
-    .day-name { font-size: 0.75rem; color: #6b7280; margin-bottom: 2px; }
+    /* Stili interni alla cella giorno (FONT RIDIMENSIONATI) */
+    .day-number { font-size: 0.85rem; font-weight: 600; } 
+    .day-name { font-size: 0.65rem; color: #6b7280; margin-bottom: 1px; } 
     .total-hours { 
-        font-size: 0.875rem; 
+        font-size: 0.75rem; /* Font più piccolo */
         font-weight: 700; 
         color: #059669; 
-        margin-top: 3px; 
+        margin-top: 2px; 
     }
     
     /* Selezionato (priorità massima) */
@@ -71,8 +71,8 @@
   </style>
 </head>
 <body>
-<div class="w-full max-w-4xl p-6 bg-white shadow-2xl rounded-xl border border-blue-100">
-  <!-- MODIFICA APPLICATA QUI -->
+<!-- Ridotto il padding su mobile (p-4) per recuperare spazio -->
+<div class="w-full max-w-4xl p-4 sm:p-6 bg-white shadow-2xl rounded-xl border border-blue-100">
   <h1 class="text-3xl font-extrabold text-gray-800 mb-6 text-center border-b-2 pb-3 border-blue-200">Timbrature</h1>
   <div id="status-message" class="text-center text-sm mb-4 p-2 rounded-lg bg-blue-50 text-blue-800">Inizializzazione del sistema...</div>
   
