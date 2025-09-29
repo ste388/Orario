@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Calendario Settimanale L-V</title>
+  <title>Timbrature</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Libreria SheetJS per l'esportazione in Excel (.xlsx) -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -795,12 +795,22 @@
     updateStatus(`Esportazione completata! File Excel "${filename}" generato.`, "success");
   }
 
+  /**
+   * Imposta le date di default per l'esportazione: primo e ultimo giorno del mese corrente.
+   */
   function initializeExportInputs() {
-      const today = formatDateId(new Date());
-      document.getElementById('endDate').value = today; 
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      document.getElementById('startDate').value = formatDateId(thirtyDaysAgo);
+      const today = new Date();
+      const currentYear = today.getFullYear();
+      const currentMonth = today.getMonth(); // Mese base 0 (Gennaio è 0)
+
+      // Primo giorno del mese corrente: giorno 1, mese e anno correnti
+      const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
+      
+      // Ultimo giorno del mese corrente: giorno 0 del MESE SUCCESSIVO
+      const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
+
+      document.getElementById('startDate').value = formatDateId(firstDayOfMonth);
+      document.getElementById('endDate').value = formatDateId(lastDayOfMonth);
       
       document.getElementById("exportButton").onclick = exportDataAsXLSX;
   }
@@ -825,7 +835,7 @@
     renderCalendar();
     selectDate(selectedDate);
     addInputListeners();
-    initializeExportInputs();
+    initializeExportInputs(); // Inizializza l'intervallo di esportazione con il mese corrente
     attachSetTimeButtonListeners();
   };
 </script>
