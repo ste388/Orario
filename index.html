@@ -11,29 +11,29 @@
     /* Stili Base */
     body { font-family: Inter, sans-serif; background-color: #f0f4f8; min-height: 100vh; display: flex; justify-content: center; align-items: flex-start; padding: 2rem 1rem; }
     
-    /* MODIFICATO: Stile della Cella del Giorno per accogliere 2 righe */
+    /* MODIFICHE PER MOBILE: Aumento dimensione cella e padding */
     .calendar-day { 
         transition: all 0.15s ease-in-out; 
         cursor: pointer; 
         user-select: none; 
-        height: 60px; /* Aumentato per 2 linee */
+        height: 72px; /* Aumentato (era 60px) per più spazio e facile tocco mobile */
         display: flex; 
         flex-direction: column; /* Stack verticale */
         align-items: center; 
         justify-content: center; 
         color: #374151; 
         font-weight: 500; 
-        padding: 4px; /* Aggiunto padding */
+        padding: 8px; /* Aumentato il padding */
     }
     .calendar-day:hover { background-color: #e0f2fe; transform: scale(1.05);}
 
     /* Stili interni alla cella giorno */
-    .day-number { font-size: 0.9rem; font-weight: 600; }
+    .day-number { font-size: 0.95rem; font-weight: 600; }
     .total-hours { 
-        font-size: 0.75rem; 
+        font-size: 0.8rem; /* Leggermente aumentato (era 0.75rem) */
         font-weight: 700; 
         color: #059669; /* Verde scuro per le ore */
-        margin-top: 2px;
+        margin-top: 3px; /* Aumentato lo spazio dal numero del giorno */
     }
     
     /* Stili per il numero del giorno quando le ore sono visualizzate */
@@ -76,7 +76,7 @@
 </head>
 <body>
 <div class="w-full max-w-4xl p-6 bg-white shadow-2xl rounded-xl border border-blue-100">
-  <!-- CAMBIATO: Titolo principale aggiornato a "Timbrature" -->
+  <!-- Titolo principale aggiornato a "Timbrature" -->
   <h1 class="text-3xl font-extrabold text-gray-800 mb-6 text-center border-b-2 pb-3 border-blue-200">Timbrature</h1>
   <div id="status-message" class="text-center text-sm mb-4 p-2 rounded-lg bg-blue-50 text-blue-800">Inizializzazione del sistema...</div>
   
@@ -88,7 +88,7 @@
   
   <!-- Sezione Form Orari -->
   <div id="daily-schedule-form" class="p-6 border border-gray-200 rounded-xl bg-gray-50 shadow-inner">
-    <!-- CAMBIATO: Rimosso "Orario per" e non viene più visualizzato l'anno (gestito in JS) -->
+    <!-- Visualizzazione data semplificata -->
     <h2 class="text-2xl font-bold text-gray-700 mb-4 text-center"><span id="selected-date-display" class="text-blue-600">Oggi</span></h2>
     
     <!-- Tabella Input Orari -->
@@ -153,7 +153,7 @@
       </table>
     </div>
     
-    <!-- MODIFICATO: Pulsante Salva spostato qui e rinominato -->
+    <!-- Pulsante Salva spostato qui e rinominato -->
     <div class="flex justify-center mt-6 mb-8"> 
       <button id="saveButton" class="px-6 py-3 bg-green-600 text-white font-semibold rounded-lg shadow-xl hover:bg-green-700 transition duration-150 ease-in-out focus:outline-none focus:ring-4 focus:ring-green-500/50">
         Salva orario
@@ -371,7 +371,6 @@
     return {
         totalDurationMinutes: totalDuration,
         totalHoursDisplay: totalHoursDisplay,
-        breakDurationMinutes: breakDuration,
         breakDurationDisplay: breakDurationDisplay,
         theoreticalExitDisplay: theoreticalExitDisplay
     };
@@ -482,7 +481,7 @@
           if (dataStatus.status === 'complete') dayCell.classList.add("status-complete");
           else if (dataStatus.status === 'partial') dayCell.classList.add("status-partial");
 
-          // MODIFICATO: Aggiunge le ore lavorate se > 0
+          // Aggiunge le ore lavorate se > 0
           if (dataStatus.totalMinutes > 0) {
               dayCell.innerHTML += `<span class="total-hours">${dataStatus.totalHours}</span>`;
           }
@@ -519,7 +518,7 @@
         newSelected.classList.add('selected');
     }
 
-    // CAMBIATO: Visualizzazione della data semplificata (senza "Orario per" e senza anno)
+    // Visualizzazione della data semplificata (senza "Orario per" e senza anno)
     const dayOfWeekIndex = (selectedDate.getDay() + 6) % 7;
     document.getElementById("selected-date-display").textContent =
       dayNames[dayOfWeekIndex] + " " +
