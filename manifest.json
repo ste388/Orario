@@ -17,19 +17,20 @@
   
   // Definizione delle Icone
   // ASSOLUTAMENTE FONDAMENTALE: Queste icone DEVONO essere presenti nella cartella /icons/
+  // AGGIUNTO IL PUNTO PRIMA DELLA SBARRA: "./icons/" per un percorso relativo più robusto
   "icons": [
     {
-      "src": "/icons/icon-192x192.png",
+      "src": "./icons/icon-192x192.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "/icons/icon-512x512.png",
+      "src": "./icons/icon-512x512.png",
       "sizes": "512x512",
       "type": "image/png"
     },
     {
-      "src": "/icons/maskable-icon-512x512.png",
+      "src": "./icons/maskable-icon-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
