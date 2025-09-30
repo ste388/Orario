@@ -200,7 +200,7 @@
         <div class="p-4 rounded-lg shadow-lg bg-indigo-100 border border-indigo-300 w-full sm:w-1/2 text-center">
             <div class="text-sm font-medium text-indigo-700 mb-1">Totale Ore Intervallo Selezionato</div>
             <div id="overallTotalHours" class="text-4xl font-extrabold text-indigo-800">00:00</div>
-            <div class="text-xs font-semibold text-indigo-700 mt-1">Calcolato tra le date qui sotto</div>
+            <div class="text-xs font-semibold text-indigo-700 mt-1">Calcolato tra le date qui sotto (o mese corrente)</div>
         </div>
     </div>
     <!-- FINE CAMPO AGGIORNATO -->
@@ -255,9 +255,6 @@
     const d = new Date(date);
     const day = d.getDay(); // 0 = Domenica, 1 = Lunedì, ..., 6 = Sabato
     // Calcola i giorni da sottrarre per arrivare al Lunedì.
-    // Lunedì (1) -> sottrai 0
-    // Martedì (2) -> sottrai 1
-    // Domenica (0) -> sottrai 6
     const diff = (day === 0) ? 6 : (day - 1);
     
     d.setDate(d.getDate() - diff);
@@ -348,21 +345,20 @@
   }
   
   /**
-   * CONVERSIONE DATA CRITICA PER COMPATIBILITÀ MOBILE:
-   * Converte l'ID data (YYYY-MM-DD) in un oggetto Date impostato
-   * alle 00:00:00 del fuso orario LOCALE. 
+   * CRITICO PER MOBILE: Converte l'ID data (YYYY-MM-DD) in un oggetto Date
+   * impostato alle 00:00:00 del fuso orario LOCALE. 
    * @param {string} dateId - Data in formato YYYY-MM-DD.
    * @returns {Date} Oggetto Date valido.
    */
   function dateIdToDate(dateId) {
-    if (!dateId || dateId.length !== 10) return new Date(NaN); // Ritorna data non valida se l'ID è sbagliato
+    if (!dateId || dateId.length !== 10) return new Date(NaN); 
     
     const parts = dateId.split('-');
     const year = parseInt(parts[0], 10);
     const month = parseInt(parts[1], 10) - 1; 
     const day = parseInt(parts[2], 10);
     
-    // Crea la data nel fuso orario locale, alle 00:00:00 (critico per getTime())
+    // Usa costruttore con numeri interi per evitare problemi di fuso orario locale
     const date = new Date(year, month, day, 0, 0, 0, 0);
     
     if (isNaN(date.getTime())) {
@@ -491,10 +487,6 @@
   
   /**
    * Aggiorna lo stato visivo di una cella giorno.
-   * @param {HTMLElement} dayCell - La cella del giorno da aggiornare.
-   * @param {number} totalMinutes - Minuti lavorati totali.
-   * @param {string} totalHoursDisplay - Ore lavorate in formato HH:MM.
-   * @param {object} data - Dati grezzi HHMM (opzionale, per status parziale).
    */
   function updateDayCellStatus(dayCell, totalMinutes, totalHoursDisplay, data = {}) {
         dayCell.classList.remove("status-partial", "status-complete");
@@ -507,11 +499,10 @@
             filledCount = Object.keys(data).filter(key => data[key] && data[key] !== "0000" && timeToMinutes(data[key]) > 0).length;
         }
 
-        if (totalMinutes > 0 || filledCount > 0) { // Mostra un'indicazione se ci sono minuti o solo timbrature parziali
+        if (totalMinutes > 0 || filledCount > 0) { 
             if (totalMinutes >= TARGET_MINUTES) {
                 dayCell.classList.add("status-complete");
             } else if (filledCount > 0) {
-                // Logica: Giallo se almeno una timbratura è presente ma non è completa (o 0 ore)
                 dayCell.classList.add("status-partial");
             }
             
@@ -520,7 +511,6 @@
                 dayCell.appendChild(hoursSpan);
             }
         } else {
-             // Rimuove l'indicatore di ore se sono 0 e non ci sono timbrature
             if (dayCell.contains(hoursSpan)) {
                 dayCell.removeChild(hoursSpan);
             }
@@ -533,7 +523,7 @@
     const calendarGrid = document.getElementById("calendar-grid");
 
     calendarGrid.innerHTML = "";
-    dailyStatuses = {}; // Ricarica lo stato per la nuova settimana
+    dailyStatuses = {}; 
 
     const weekDates = [];
     for(let i = 0; i < 5; i++) { // L-V
@@ -554,7 +544,6 @@
       dayCell.className = "calendar-day rounded-md m-1";
       dayCell.dataset.date = dateId;
 
-      // Carica i dati dal localStorage per questo giorno
       const dataString = localStorage.getItem(LOCAL_STORAGE_PREFIX + dateId);
       let dataStatus = null;
       let data = {};
@@ -596,10 +585,9 @@
 
   function changeWeek(offset) {
     currentWeekStart.setDate(currentWeekStart.getDate() + offset * 7);
-    // Assicurati che selectedDate sia all'interno della nuova settimana
     selectedDate = new Date(currentWeekStart); 
     renderCalendar();
-    loadFormFromLocalStorage(); // Carica il lunedì della nuova settimana
+    loadFormFromLocalStorage(); 
   }
 
   function updateStatus(message, type = "info") {
@@ -627,9 +615,8 @@
         newSelected.classList.add('selected');
     }
 
-    const dayOfWeekIndex = selectedDate.getDay(); // 0=Sun, 1=Mon...
+    const dayOfWeekIndex = selectedDate.getDay(); 
     const dayName = dayNamesFull[dayOfWeekIndex];
-    // Aggiorna la visualizzazione della data selezionata (SENZA ANNO)
     document.getElementById("selected-date-display").textContent =
       dayName + " " +
       selectedDate.getDate() + " " +
@@ -638,9 +625,6 @@
     loadFormFromLocalStorage(); 
   }
   
-  /**
-   * Raccoglie i dati, convertendoli dal formato display (HH:MM) al formato di salvataggio (HHMM).
-   */
   function collectDailyData() {
     const data = {};
     ["entrataMattina", "uscitaPranzo", "entrataPomeriggio", "uscitaSera"].forEach(field => {
@@ -650,9 +634,6 @@
     return data;
   }
   
-  /**
-   * Carica i dati dal Local Storage e li visualizza nella form.
-   */
   function loadFormFromLocalStorage() {
     const dateId = formatDateId(selectedDate);
     const key = LOCAL_STORAGE_PREFIX + dateId;
@@ -686,9 +667,6 @@
     updateStatus(`Dati per ${dateId} caricati.`, "info");
   }
 
-  /**
-   * Attacca i listener focus/blur/input per la formattazione HH:MM e i calcoli in tempo reale.
-   */
   function addInputListeners() {
     document.querySelectorAll(".time-input").forEach(input => {
       // 1. INPUT: Aggiorna i calcoli in tempo reale
@@ -736,7 +714,6 @@
                 inputField.value = currentTime;
                 inputField.classList.remove('italic-placeholder');
                 
-                // Forza l'evento blur per applicare la formattazione e ricalcolare
                 const event = new Event('blur');
                 inputField.dispatchEvent(event);
                 
@@ -746,22 +723,18 @@
     });
   }
 
-  /**
-   * Salva i dati nel Local Storage.
-   */
   function saveDataToLocalStorage() {
     const dateId = formatDateId(selectedDate);
     const key = LOCAL_STORAGE_PREFIX + dateId;
-    const dataToSave = collectDailyData(); // Questo ritorna HHMM
+    const dataToSave = collectDailyData(); 
 
     updateStatus("Salvataggio in corso...", "info");
     try {
       localStorage.setItem(key, JSON.stringify(dataToSave));
       updateStatus("Orario per la data selezionata salvato con successo nel Local Storage!", "success");
       
-      // Aggiorna la cella del giorno sul calendario e il totale storico
       renderCalendar(); 
-      updateExportTotalHours(); // Aggiorna il totale dell'intervallo
+      updateExportTotalHours(); 
     } catch (e) {
       console.error("Errore nel salvataggio su Local Storage:", e);
       updateStatus("Errore nel salvataggio. Controlla la console.", "error");
@@ -769,18 +742,15 @@
   }
   
   // =======================================================================
-  // LOGICA TOTALE ORE INTERVALLO SELEZIONATO (REVISIONE FINALE)
+  // LOGICA TOTALE ORE INTERVALLO SELEZIONATO (REVISIONE FALLBACK)
   // =======================================================================
   
   /**
    * Calcola la somma totale di tutti i minuti lavorati in un intervallo di date.
-   * @param {string} startDateId - Data di inizio (YYYY-MM-DD).
-   * @param {string} endDateId - Data di fine (YYYY-MM-DD).
    */
   function calculateOverallTotalHours(startDateId, endDateId) {
       let overallTotalMinutes = 0;
       
-      // 1. Usa la funzione di parsing robusta per creare oggetti Date coerenti (00:00:00 locale)
       const startFilterDate = dateIdToDate(startDateId);
       const endFilterDate = dateIdToDate(endDateId);
       
@@ -789,12 +759,10 @@
         return 0;
       }
 
-      // 2. Definizione dei Timestamp per il confronto (CRITICO)
       const startTimestamp = startFilterDate.getTime();
-      // Aggiunge 24 ore a endFilterDate per rendere l'intervallo INCLUSIVO [start, end+1 giorno)
+      // Intervallo INCLUSIVO [start, end+1 giorno)
       const inclusiveEndTimestamp = endFilterDate.getTime() + (24 * 60 * 60 * 1000); 
       
-      // 3. Iterazione e Filtraggio RIGOROSO delle chiavi di Local Storage
       for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
           
@@ -806,17 +774,15 @@
               const dateId = key.substring(LOCAL_STORAGE_PREFIX.length);
               const date = dateIdToDate(dateId);
 
-              // Verifica che la data ID sia effettivamente valida
               if (isNaN(date.getTime())) continue; 
               
               const dateTimestamp = date.getTime();
               
-              // Confronto robusto basato sul timestamp: data >= start E data < inclusiveEnd
+              // Confronto robusto basato sul timestamp
               if (dateTimestamp >= startTimestamp && dateTimestamp < inclusiveEndTimestamp) {
                   const dataString = localStorage.getItem(key);
                   try {
                       const data = JSON.parse(dataString);
-                      // Usiamo calculateDurations per ottenere i minuti lavorati per quel giorno
                       const durations = calculateDurations(data); 
                       overallTotalMinutes += durations.totalDurationMinutes;
                   } catch (e) {
@@ -830,31 +796,48 @@
   }
   
   /**
-   * Aggiorna l'elemento del totale ore nell'area di esportazione leggendo gli input data.
+   * Aggiorna l'elemento del totale ore nell'area di esportazione leggendo gli input data,
+   * utilizzando il mese corrente come fallback se gli input sono non validi.
    */
   function updateExportTotalHours() {
-    const startDateId = document.getElementById("startDate").value;
-    const endDateId = document.getElementById("endDate").value;
+    let startDateId = document.getElementById("startDate").value;
+    let endDateId = document.getElementById("endDate").value;
+    let fallbackUsed = false;
     
-    // Verifica base della presenza
-    if (!startDateId || !endDateId) {
-        document.getElementById("overallTotalHours").textContent = "00:00";
-        return;
+    let startDate = dateIdToDate(startDateId);
+    let endDate = dateIdToDate(endDateId);
+
+    // Controlla se le date non sono valide O se l'intervallo è invertito
+    if (!startDateId || !endDateId || isNaN(startDate.getTime()) || isNaN(endDate.getTime()) || startDate.getTime() > endDate.getTime()) {
+        
+        // --- LOGICA DI FALLBACK ---
+        const today = new Date();
+        const currentYear = today.getFullYear();
+        const currentMonth = today.getMonth(); 
+        
+        // Imposta il mese corrente (1° giorno, 00:00:00 locale)
+        startDate = new Date(currentYear, currentMonth, 1, 0, 0, 0, 0);
+        // Ultimo giorno del mese (00:00:00 locale)
+        endDate = new Date(currentYear, currentMonth + 1, 0, 0, 0, 0, 0); 
+        
+        startDateId = formatDateId(startDate);
+        endDateId = formatDateId(endDate);
+        
+        fallbackUsed = true;
     }
-
-    const startDate = dateIdToDate(startDateId);
-    const endDate = dateIdToDate(endDateId);
-
-    // Confrontiamo i timestamp per un controllo affidabile dell'intervallo (FIX Mobile)
-    if (startDate.getTime() <= endDate.getTime()) {
-        const totalMinutes = calculateOverallTotalHours(startDateId, endDateId);
-        const totalHoursDisplay = timeToDisplay(minutesToHoursString(totalMinutes));
-        document.getElementById("overallTotalHours").textContent = totalHoursDisplay;
-        updateStatus("Totale ore intervallo aggiornato.", "info");
+    
+    // Esegue il calcolo con le date (validate o forzate dal fallback)
+    const totalMinutes = calculateOverallTotalHours(startDateId, endDateId);
+    const totalHoursDisplay = timeToDisplay(minutesToHoursString(totalMinutes));
+    document.getElementById("overallTotalHours").textContent = totalHoursDisplay;
+    
+    if (fallbackUsed) {
+         // Mostra lo stato di fallback solo se il calcolo è maggiore di zero, altrimenti è irrilevante
+        if (totalMinutes > 0) {
+            updateStatus(`Totale ore intervallo aggiornato (utilizzando il mese corrente come fallback).`, "info");
+        }
     } else {
-        // Se l'intervallo è invertito
-        document.getElementById("overallTotalHours").textContent = "00:00";
-        updateStatus("Errore: La data di fine non può essere precedente alla data di inizio.", "error");
+        updateStatus("Totale ore intervallo aggiornato.", "info");
     }
   }
   
@@ -876,13 +859,12 @@
         return;
     }
 
-    // Usa la funzione di parsing robusta
     const startDate = dateIdToDate(startDateInput);
     const endDate = dateIdToDate(endDateInput);
 
-    // Controllo robusto delle date (FIX Mobile)
-    if (startDate.getTime() > endDate.getTime()) {
-        updateStatus("La data di fine non può essere precedente alla data di inizio.", "error");
+    // Controllo robusto delle date
+    if (startDate.getTime() > endDate.getTime() || isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+        updateStatus("La data di fine non può essere precedente alla data di inizio o le date non sono valide.", "error");
         return;
     }
     
@@ -955,17 +937,15 @@
   function initializeExportInputs() {
       const today = new Date();
       const currentYear = today.getFullYear();
-      const currentMonth = today.getMonth(); // Mese base 0 (Gennaio è 0)
+      const currentMonth = today.getMonth(); 
 
-      // Primo giorno del mese corrente: giorno 1, mese e anno correnti
       const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
-      
-      // Ultimo giorno del mese corrente: giorno 0 del MESE SUCCESSIVO
       const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
 
       const startDateInput = document.getElementById('startDate');
       const endDateInput = document.getElementById('endDate');
       
+      // Imposta i valori di default per l'input
       startDateInput.value = formatDateId(firstDayOfMonth);
       endDateInput.value = formatDateId(lastDayOfMonth);
       
@@ -983,9 +963,8 @@
     document.getElementById("nextWeek").onclick = () => changeWeek(1);
 
     // Selezione iniziale e rendering
-    // Assicura che la data selezionata cada su un giorno lavorativo della settimana corrente
     let today = new Date();
-    if (today.getDay() === 0 || today.getDay() === 6) { // Se è Sabato (6) o Domenica (0), seleziona il Lunedì
+    if (today.getDay() === 0 || today.getDay() === 6) { 
         selectedDate = getStartOfWeek(today);
     } else {
         selectedDate = today;
@@ -993,13 +972,14 @@
     currentWeekStart = getStartOfWeek(selectedDate);
     
     updateStatus("Applicazione inizializzata. Dati salvati in Local Storage.");
-    initializeExportInputs(); // Inizializza l'intervallo di esportazione con il mese corrente e i listener
+    initializeExportInputs(); 
     renderCalendar(); 
     selectDate(selectedDate);
     addInputListeners();
+    
     // Aggiorna il totale una volta caricati i valori di default delle date
     updateExportTotalHours(); 
-    attachSetTimeButtonListeners(); // Attacca anche i listener per i bottoni "Imposta ora corrente"
+    attachSetTimeButtonListeners(); 
   };
 </script>
 
