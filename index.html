@@ -167,11 +167,11 @@
     <h3 class="text-xl font-bold text-gray-700 mt-6 mb-3 text-center border-t pt-4 border-gray-200">Risultati Calcolati Giornalieri</h3>
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
       
-      <!-- Pausa Pranzo Card -->
-      <div id="pausaPranzoCard" class="p-4 rounded-lg shadow-xl bg-white border transition duration-150 ease-in-out">
-        <div class="text-xs font-medium text-gray-500 mb-1">Durata Pausa Pranzo</div>
-        <div id="pausaPranzo" class="text-3xl font-extrabold text-gray-900">00:00</div>
-        <div id="pausaPranzoStatus" class="text-xs font-semibold mt-1 text-gray-600">Inserisci orari</div>
+      <!-- Totale Ore Lavorate Card (NUOVA POSIZIONE: PRIMA) -->
+      <div class="p-4 rounded-lg shadow-xl bg-green-100 border border-green-300">
+        <div class="text-xs font-medium text-green-700 mb-1">Totale Ore Lavorate</div>
+        <div id="totalHours" class="text-3xl font-extrabold text-green-800">00:00</div>
+        <div class="text-xs font-semibold text-green-700 mt-1">(Mattina + Pomeriggio)</div>
       </div>
       
       <!-- Uscita Teorica Card (Aggiornata per mostrare sempre HH:MM) -->
@@ -181,12 +181,13 @@
         <div class="text-xs font-semibold text-purple-700 mt-1" title="Uscita richiesta per totalizzare 8 ore di lavoro.">8:00h di lavoro richiesto</div>
       </div>
       
-      <!-- Totale Ore Lavorate Card -->
-      <div class="p-4 rounded-lg shadow-xl bg-green-100 border border-green-300">
-        <div class="text-xs font-medium text-green-700 mb-1">Totale Ore Lavorate</div>
-        <div id="totalHours" class="text-3xl font-extrabold text-green-800">00:00</div>
-        <div class="text-xs font-semibold text-green-700 mt-1">(Mattina + Pomeriggio)</div>
+      <!-- Pausa Pranzo Card (NUOVA POSIZIONE: TERZA) -->
+      <div id="pausaPranzoCard" class="p-4 rounded-lg shadow-xl bg-white border transition duration-150 ease-in-out">
+        <div class="text-xs font-medium text-gray-500 mb-1">Durata Pausa Pranzo</div>
+        <div id="pausaPranzo" class="text-3xl font-extrabold text-gray-900">00:00</div>
+        <div id="pausaPranzoStatus" class="text-xs font-semibold mt-1 text-gray-600">Inserisci orari</div>
       </div>
+
     </div>
   </div>
   
@@ -194,15 +195,15 @@
   <div class="mt-8 p-6 border border-gray-200 rounded-xl bg-indigo-50 shadow-inner">
     <h3 class="text-xl font-bold text-gray-700 mb-4 text-center">Esporta Storico Orari</h3>
     
-    <!-- NUOVO CAMPO: TOTALE ORE STORICO -->
+    <!-- CAMPO: TOTALE ORE INTERVALLO SELEZIONATO -->
     <div class="flex justify-center mb-6">
         <div class="p-4 rounded-lg shadow-lg bg-indigo-100 border border-indigo-300 w-full sm:w-1/2 text-center">
-            <div class="text-sm font-medium text-indigo-700 mb-1">Totale Ore Lavorate Storico</div>
+            <div class="text-sm font-medium text-indigo-700 mb-1">Totale Ore Intervallo Selezionato</div>
             <div id="overallTotalHours" class="text-4xl font-extrabold text-indigo-800">00:00</div>
-            <div class="text-xs font-semibold text-indigo-700 mt-1">(Totale tutti i giorni salvati)</div>
+            <div class="text-xs font-semibold text-indigo-700 mt-1">Calcolato tra le date qui sotto</div>
         </div>
     </div>
-    <!-- FINE NUOVO CAMPO -->
+    <!-- FINE CAMPO AGGIORNATO -->
 
     <div class="flex flex-col sm:flex-row gap-4 items-center justify-center">
       <div class="w-full sm:w-auto">
@@ -421,7 +422,7 @@
     // 1. Totale Ore Lavorate
     document.getElementById("totalHours").textContent = results.totalHoursDisplay;
     
-    // 2. Pausa Pranzo e Styling (Card) (Omesso per brevità, stessa logica precedente)
+    // 2. Pausa Pranzo e Styling (Card) 
     const pausaPranzoDisplay = document.getElementById("pausaPranzo");
     const pausaPranzoCard = document.getElementById("pausaPranzoCard");
     const pausaPranzoStatus = document.getElementById("pausaPranzoStatus"); 
@@ -563,8 +564,8 @@
       calendarGrid.appendChild(dayCell);
     });
     
-    // Aggiorna il totale storico
-    calculateOverallTotalHours();
+    // Aggiorna il totale storico (ora il totale dell'intervallo di esportazione)
+    updateExportTotalHours();
   }
 
   function changeWeek(offset) {
@@ -734,8 +735,7 @@
       
       // Aggiorna la cella del giorno sul calendario e il totale storico
       renderCalendar(); 
-      calculateOverallTotalHours();
-
+      updateExportTotalHours(); // Aggiorna il totale dell'intervallo
     } catch (e) {
       console.error("Errore nel salvataggio su Local Storage:", e);
       updateStatus("Errore nel salvataggio. Controlla la console.", "error");
@@ -743,19 +743,42 @@
   }
   
   // =======================================================================
-  // CALCOLO TOTALE ORE STORICO
+  // LOGICA TOTALE ORE INTERVALLO SELEZIONATO
   // =======================================================================
   
   /**
-   * Calcola la somma totale di tutti i minuti lavorati in tutti i dati salvati.
+   * Calcola la somma totale di tutti i minuti lavorati in un intervallo di date.
+   * Se startDateId e endDateId sono nulli, calcola il totale generale.
+   * @param {string | null} startDateId - Data di inizio (YYYY-MM-DD).
+   * @param {string | null} endDateId - Data di fine (YYYY-MM-DD).
    */
-  function calculateOverallTotalHours() {
+  function calculateOverallTotalHours(startDateId, endDateId) {
       let overallTotalMinutes = 0;
+      let startFilterDate = null;
+      let endFilterDate = null;
+      
+      // Imposta le date di filtro se fornite
+      if (startDateId && endDateId) {
+          startFilterDate = dateIdToDate(startDateId);
+          // Aggiunge un giorno per rendere l'intervallo INCLUSIVO
+          endFilterDate = dateIdToDate(endDateId);
+          endFilterDate.setUTCDate(endFilterDate.getUTCDate() + 1); 
+      }
       
       for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
           
-          if (key && key.startsWith(LOCAL_STORAGE_PREFIX)) {
+          if (key && key.startsWith(LOCAL_STORAGE_PREFIX) && key.length === (LOCAL_STORAGE_PREFIX.length + 10)) {
+              const dateId = key.substring(LOCAL_STORAGE_PREFIX.length);
+              
+              // Applica il filtro solo se le date sono definite
+              if (startFilterDate && endFilterDate) {
+                  const date = dateIdToDate(dateId);
+                  if (date < startFilterDate || date >= endFilterDate) {
+                      continue; // Salta se la data non è nell'intervallo
+                  }
+              }
+              
               const dataString = localStorage.getItem(key);
               try {
                   const data = JSON.parse(dataString);
@@ -768,11 +791,25 @@
           }
       }
       
-      // Converti il totale generale in formato HH:MM
-      const totalHoursDisplay = timeToDisplay(minutesToHoursString(overallTotalMinutes));
-      
-      // Aggiorna l'elemento nella UI
-      document.getElementById("overallTotalHours").textContent = totalHoursDisplay;
+      return overallTotalMinutes;
+  }
+  
+  /**
+   * Aggiorna l'elemento del totale ore nell'area di esportazione leggendo gli input data.
+   */
+  function updateExportTotalHours() {
+    const startDateId = document.getElementById("startDate").value;
+    const endDateId = document.getElementById("endDate").value;
+    
+    // Verifica che le date siano valide prima di calcolare
+    if (startDateId && endDateId && startDateId <= endDateId) {
+        const totalMinutes = calculateOverallTotalHours(startDateId, endDateId);
+        const totalHoursDisplay = timeToDisplay(minutesToHoursString(totalMinutes));
+        document.getElementById("overallTotalHours").textContent = totalHoursDisplay;
+    } else {
+        // Se le date non sono valide o mancanti, mostra 00:00
+        document.getElementById("overallTotalHours").textContent = "00:00";
+    }
   }
   
   // =======================================================================
@@ -876,10 +913,17 @@
       // Ultimo giorno del mese corrente: giorno 0 del MESE SUCCESSIVO
       const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
 
-      document.getElementById('startDate').value = formatDateId(firstDayOfMonth);
-      document.getElementById('endDate').value = formatDateId(lastDayOfMonth);
+      const startDateInput = document.getElementById('startDate');
+      const endDateInput = document.getElementById('endDate');
+      
+      startDateInput.value = formatDateId(firstDayOfMonth);
+      endDateInput.value = formatDateId(lastDayOfMonth);
       
       document.getElementById("exportButton").onclick = exportDataAsXLSX;
+      
+      // Aggiungi listener per aggiornare il totale quando cambiano le date
+      startDateInput.addEventListener('change', updateExportTotalHours);
+      endDateInput.addEventListener('change', updateExportTotalHours);
   }
 
 
@@ -899,11 +943,13 @@
     currentWeekStart = getStartOfWeek(selectedDate);
     
     updateStatus("Applicazione inizializzata. Dati salvati in Local Storage.");
-    renderCalendar(); // Esegue anche il calcolo del totale storico
+    initializeExportInputs(); // Inizializza l'intervallo di esportazione con il mese corrente e i listener
+    renderCalendar(); 
     selectDate(selectedDate);
     addInputListeners();
-    initializeExportInputs(); // Inizializza l'intervallo di esportazione con il mese corrente
-    attachSetTimeButtonListeners();
+    // Aggiorna il totale una volta caricati i valori di default delle date
+    updateExportTotalHours(); 
+    attachSetTimeButtonListeners(); // Attacca anche i listener per i bottoni "Imposta ora corrente"
   };
 </script>
 
