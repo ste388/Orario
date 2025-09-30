@@ -22,8 +22,7 @@
   <link rel="apple-touch-icon" sizes="76x76" href="/icons/apple-touch-icon-76x76.png">
 
   <!-- 3. Manifest PWA (Android/Web App) -->
-  <!-- Questo file JSON definisce il nome, le icone PNG multiple e il comportamento. -->
-  <link rel="manifest" href="/manifest.json">
+  <link rel="manifest" href="./manifest.json">
 
   <!-- Colore del tema per l'interfaccia utente del browser su Android -->
   <meta name="theme-color" content="#3b82f6"> 
@@ -241,6 +240,7 @@
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       // CORREZIONE: Uso del percorso relativo './' per risolvere l'errore del protocollo URL
+      // NOTA: il percorso per service-worker.js è ancora valido se si trova nella stessa directory
       navigator.serviceWorker.register('./service-worker.js')
         .then(registration => {
           console.log('Service Worker registrato con successo:', registration.scope);
