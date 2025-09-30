@@ -2,7 +2,7 @@
 const CACHE_NAME = 'timbrature-v2'; // Incrementato il nome della cache per forzare l'aggiornamento
 const urlsToCache = [
   './', // L'HTML principale (risoluzione root)
-  './index.html', // Percorso esplicito del file HTML (IMPORTANTE)
+  './index.html', // <--- AGGIORNATO: ora si chiama index.html
   './manifest.json',
   // Aggiungere qui i percorsi esatti delle icone (devono esistere!)
   // '/icons/icon-192x192.png', 
@@ -63,5 +63,4 @@ self.addEventListener('activate', event => {
       );
     })
   );
-
 });
