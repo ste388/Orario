@@ -7,6 +7,29 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Libreria SheetJS per l'esportazione in Excel (.xlsx) -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  
+  <!-- ======================================================= -->
+  <!-- CONFIGURAZIONE ICONE APP PER SCHERMATA HOME (RICHIESTA) -->
+  <!-- ======================================================= -->
+  
+  <!-- 1. Favicon Standard (Utilizza il file ICO caricato) -->
+  <link rel="icon" type="image/x-icon" href="uploaded:ico.ico">
+
+  <!-- 2. Icone Apple Touch (iOS/iPad) -->
+  <!-- NOTA: Questi percorsi DEVONO essere file PNG con le risoluzioni specificate. -->
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon-180x180.png">
+  <link rel="apple-touch-icon" sizes="120x120" href="/icons/apple-touch-icon-120x120.png">
+  <link rel="apple-touch-icon" sizes="76x76" href="/icons/apple-touch-icon-76x76.png">
+
+  <!-- 3. Manifest PWA (Android/Web App) -->
+  <!-- Questo file JSON definisce il nome, le icone PNG multiple e il comportamento. -->
+  <link rel="manifest" href="/manifest.json">
+
+  <!-- Colore del tema per l'interfaccia utente del browser su Android -->
+  <meta name="theme-color" content="#3b82f6"> 
+  
+  <!-- ======================================================= -->
+
   <style>
     /* Stili Base */
     body { font-family: Inter, sans-serif; background-color: #f0f4f8; min-height: 100vh; display: flex; justify-content: center; align-items: flex-start; padding: 2rem 1rem; }
