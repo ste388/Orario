@@ -236,6 +236,25 @@
 
 <script>
   // =======================================================================
+  // REGISTRAZIONE PWA (Service Worker)
+  // =======================================================================
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      // CORREZIONE: Uso del percorso relativo './' per risolvere l'errore del protocollo URL
+      navigator.serviceWorker.register('./service-worker.js')
+        .then(registration => {
+          console.log('Service Worker registrato con successo:', registration.scope);
+          // Non aggiorniamo lo stato qui per non confondere l'utente
+        })
+        .catch(error => {
+          console.error('Registrazione Service Worker fallita:', error);
+          updateStatus("ATTENZIONE: Registrazione PWA fallita. L'icona potrebbe non essere corretta.", "error");
+        });
+    });
+  }
+
+
+  // =======================================================================
   // CONFIGURAZIONE STATO LOCALE (LOCAL STORAGE)
   // =======================================================================
 
