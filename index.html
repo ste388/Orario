@@ -271,7 +271,8 @@
 
   function timeToMinutes(timeString) {
     if (!timeString) return 0;
-    const digitsOnly = timeString.replace(/[^0-9]/g, '').padStart(4, '0').substring(0, 4);
+    // Rimuove i ':' per standardizzare a HHMM
+    const digitsOnly = timeString.replace(/[^0-9]/g, '').padStart(4, '0').substring(0, 4); 
 
     if (digitsOnly === "0000") return 0;
 
@@ -345,7 +346,7 @@
   }
   
   /**
-   * CRITICO PER MOBILE: Converte l'ID data (YYYY-MM-DD) in un oggetto Date
+   * CRITICO: Converte l'ID data (YYYY-MM-DD) in un oggetto Date
    * impostato alle 00:00:00 del fuso orario LOCALE. 
    * @param {string} dateId - Data in formato YYYY-MM-DD.
    * @returns {Date} Oggetto Date valido.
@@ -742,7 +743,7 @@
   }
   
   // =======================================================================
-  // LOGICA TOTALE ORE INTERVALLO SELEZIONATO (REVISIONE FALLBACK)
+  // LOGICA TOTALE ORE INTERVALLO SELEZIONATO (REVISIONE AGGRESSIVA V6)
   // =======================================================================
   
   /**
@@ -755,7 +756,7 @@
       const endFilterDate = dateIdToDate(endDateId);
       
       if (isNaN(startFilterDate.getTime()) || isNaN(endFilterDate.getTime())) {
-        console.error("Date filtro non valide, impossibile calcolare il totale.");
+        console.error("DEBUG CALCOLO: Date filtro non valide (NaN), impossibile calcolare il totale.");
         return 0;
       }
 
@@ -786,7 +787,7 @@
                       const durations = calculateDurations(data); 
                       overallTotalMinutes += durations.totalDurationMinutes;
                   } catch (e) {
-                      console.error("Errore di parsing o calcolo per la chiave:", key, e);
+                      console.error("DEBUG CALCOLO: Errore di parsing o calcolo per la chiave:", key, e);
                   }
               }
           }
@@ -800,42 +801,48 @@
    * utilizzando il mese corrente come fallback se gli input sono non validi.
    */
   function updateExportTotalHours() {
-    let startDateId = document.getElementById("startDate").value;
-    let endDateId = document.getElementById("endDate").value;
+    let startDateInput = document.getElementById("startDate").value;
+    let endDateInput = document.getElementById("endDate").value;
     let fallbackUsed = false;
     
-    let startDate = dateIdToDate(startDateId);
-    let endDate = dateIdToDate(endDateId);
+    let startDateId = startDateInput;
+    let endDateId = endDateInput;
 
-    // Controlla se le date non sono valide O se l'intervallo è invertito
-    if (!startDateId || !endDateId || isNaN(startDate.getTime()) || isNaN(endDate.getTime()) || startDate.getTime() > endDate.getTime()) {
+    const startDateCheck = dateIdToDate(startDateId);
+    const endDateCheck = dateIdToDate(endDateId);
+
+    // Controlla se le date NON sono valide (stringa vuota, formato non riconosciuto, o invertite)
+    if (!startDateId || !endDateId || isNaN(startDateCheck.getTime()) || isNaN(endDateCheck.getTime()) || startDateCheck.getTime() > endDateCheck.getTime()) {
         
-        // --- LOGICA DI FALLBACK ---
+        // --- LOGICA DI FALLBACK: USA IL MESE CORRENTE ---
         const today = new Date();
         const currentYear = today.getFullYear();
         const currentMonth = today.getMonth(); 
         
         // Imposta il mese corrente (1° giorno, 00:00:00 locale)
-        startDate = new Date(currentYear, currentMonth, 1, 0, 0, 0, 0);
+        const startDateFallback = new Date(currentYear, currentMonth, 1, 0, 0, 0, 0);
         // Ultimo giorno del mese (00:00:00 locale)
-        endDate = new Date(currentYear, currentMonth + 1, 0, 0, 0, 0, 0); 
+        const endDateFallback = new Date(currentYear, currentMonth + 1, 0, 0, 0, 0, 0); 
         
-        startDateId = formatDateId(startDate);
-        endDateId = formatDateId(endDate);
+        startDateId = formatDateId(startDateFallback);
+        endDateId = formatDateId(endDateFallback);
         
         fallbackUsed = true;
     }
     
+    console.log(`DEBUG CALCOLO: Calcolo Totale Ore da: ${startDateId} a: ${endDateId}. Fallback: ${fallbackUsed ? 'SÌ (Mese Corrente)' : 'NO'}`);
+
+
     // Esegue il calcolo con le date (validate o forzate dal fallback)
     const totalMinutes = calculateOverallTotalHours(startDateId, endDateId);
     const totalHoursDisplay = timeToDisplay(minutesToHoursString(totalMinutes));
     document.getElementById("overallTotalHours").textContent = totalHoursDisplay;
     
     if (fallbackUsed) {
-         // Mostra lo stato di fallback solo se il calcolo è maggiore di zero, altrimenti è irrilevante
-        if (totalMinutes > 0) {
-            updateStatus(`Totale ore intervallo aggiornato (utilizzando il mese corrente come fallback).`, "info");
-        }
+        const message = totalMinutes > 0 
+            ? `Totale ore intervallo aggiornato (usando il mese corrente: ${startDateId} - ${endDateId}).`
+            : `Totale ore calcolato, ma non sono state trovate timbrature nel mese corrente (fallback).`;
+        updateStatus(message, "info");
     } else {
         updateStatus("Totale ore intervallo aggiornato.", "info");
     }
@@ -945,7 +952,7 @@
       const startDateInput = document.getElementById('startDate');
       const endDateInput = document.getElementById('endDate');
       
-      // Imposta i valori di default per l'input
+      // Imposta i valori di default per l'input (YYYY-MM-DD)
       startDateInput.value = formatDateId(firstDayOfMonth);
       endDateInput.value = formatDateId(lastDayOfMonth);
       
@@ -954,6 +961,8 @@
       // Aggiungi listener per aggiornare il totale quando cambiano le date
       startDateInput.addEventListener('change', updateExportTotalHours);
       endDateInput.addEventListener('change', updateExportTotalHours);
+      
+      console.log(`DEBUG INIZIALIZZAZIONE: Input date pre-valorizzati con: ${startDateInput.value} - ${endDateInput.value}`);
   }
 
 
