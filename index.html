@@ -350,25 +350,24 @@
   /**
    * CONVERSIONE DATA CRITICA PER COMPATIBILITÀ MOBILE:
    * Converte l'ID data (YYYY-MM-DD) in un oggetto Date impostato
-   * alle 00:00:00 del fuso orario LOCALE. Questo è l'unico modo per
-   * garantire che il .getTime() sia coerente tra i browser.
+   * alle 00:00:00 del fuso orario LOCALE. 
    * @param {string} dateId - Data in formato YYYY-MM-DD.
    * @returns {Date} Oggetto Date valido.
    */
   function dateIdToDate(dateId) {
+    if (!dateId || dateId.length !== 10) return new Date(NaN); // Ritorna data non valida se l'ID è sbagliato
+    
     const parts = dateId.split('-');
-    // Importante: i mesi in JS vanno da 0 a 11, quindi Month - 1
     const year = parseInt(parts[0], 10);
     const month = parseInt(parts[1], 10) - 1; 
     const day = parseInt(parts[2], 10);
     
-    // Crea la data nel fuso orario locale, alle 00:00:00
+    // Crea la data nel fuso orario locale, alle 00:00:00 (critico per getTime())
     const date = new Date(year, month, day, 0, 0, 0, 0);
     
-    // Verifica di compatibilità, se il timestamp è NaN, ritorna un fallback
     if (isNaN(date.getTime())) {
         console.error("Data creata non valida (NaN) per ID:", dateId);
-        return new Date(0); // Ritorna data zero per evitare errori
+        return new Date(NaN); 
     }
     
     return date;
@@ -512,7 +511,7 @@
             if (totalMinutes >= TARGET_MINUTES) {
                 dayCell.classList.add("status-complete");
             } else if (filledCount > 0) {
-                // Nuova logica richiesta: Giallo se almeno una timbratura è presente ma non è completa (o 0 ore)
+                // Logica: Giallo se almeno una timbratura è presente ma non è completa (o 0 ore)
                 dayCell.classList.add("status-partial");
             }
             
@@ -770,7 +769,7 @@
   }
   
   // =======================================================================
-  // LOGICA TOTALE ORE INTERVALLO SELEZIONATO
+  // LOGICA TOTALE ORE INTERVALLO SELEZIONATO (REVISIONE FINALE)
   // =======================================================================
   
   /**
@@ -781,25 +780,39 @@
   function calculateOverallTotalHours(startDateId, endDateId) {
       let overallTotalMinutes = 0;
       
-      // Usa la funzione di parsing robusta per creare oggetti Date coerenti (00:00:00 locale)
-      let startFilterDate = dateIdToDate(startDateId);
-      let endFilterDate = dateIdToDate(endDateId);
+      // 1. Usa la funzione di parsing robusta per creare oggetti Date coerenti (00:00:00 locale)
+      const startFilterDate = dateIdToDate(startDateId);
+      const endFilterDate = dateIdToDate(endDateId);
       
-      // Aggiunge 24 ore a endFilterDate per rendere l'intervallo INCLUSIVO
-      const endTimestamp = endFilterDate.getTime() + (24 * 60 * 60 * 1000);
+      if (isNaN(startFilterDate.getTime()) || isNaN(endFilterDate.getTime())) {
+        console.error("Date filtro non valide, impossibile calcolare il totale.");
+        return 0;
+      }
+
+      // 2. Definizione dei Timestamp per il confronto (CRITICO)
       const startTimestamp = startFilterDate.getTime();
+      // Aggiunge 24 ore a endFilterDate per rendere l'intervallo INCLUSIVO [start, end+1 giorno)
+      const inclusiveEndTimestamp = endFilterDate.getTime() + (24 * 60 * 60 * 1000); 
       
+      // 3. Iterazione e Filtraggio RIGOROSO delle chiavi di Local Storage
       for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
           
-          if (key && key.startsWith(LOCAL_STORAGE_PREFIX) && key.length === (LOCAL_STORAGE_PREFIX.length + 10)) {
-              const dateId = key.substring(LOCAL_STORAGE_PREFIX.length);
+          // Filtro rigoroso: deve iniziare con il prefisso E AVERE la lunghezza esatta (prefisso + 10 caratteri della data YYYY-MM-DD)
+          if (key && 
+              key.startsWith(LOCAL_STORAGE_PREFIX) && 
+              key.length === (LOCAL_STORAGE_PREFIX.length + 10)) {
               
+              const dateId = key.substring(LOCAL_STORAGE_PREFIX.length);
               const date = dateIdToDate(dateId);
+
+              // Verifica che la data ID sia effettivamente valida
+              if (isNaN(date.getTime())) continue; 
+              
               const dateTimestamp = date.getTime();
               
-              // Confronto robusto basato sul timestamp: [start, end)
-              if (dateTimestamp >= startTimestamp && dateTimestamp < endTimestamp) {
+              // Confronto robusto basato sul timestamp: data >= start E data < inclusiveEnd
+              if (dateTimestamp >= startTimestamp && dateTimestamp < inclusiveEndTimestamp) {
                   const dataString = localStorage.getItem(key);
                   try {
                       const data = JSON.parse(dataString);
@@ -885,10 +898,15 @@
     for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
         
-        if (key && key.startsWith(LOCAL_STORAGE_PREFIX) && key.length === (LOCAL_STORAGE_PREFIX.length + 10)) {
+        if (key && 
+            key.startsWith(LOCAL_STORAGE_PREFIX) && 
+            key.length === (LOCAL_STORAGE_PREFIX.length + 10)) {
+            
             const dateId = key.substring(LOCAL_STORAGE_PREFIX.length);
             const date = dateIdToDate(dateId);
             
+            if (isNaN(date.getTime())) continue; 
+
             // Confronto robusto basato sul timestamp: [start, end)
             if (date.getTime() >= startDateTimestamp && date.getTime() < inclusiveEndDateTimestamp) {
                 const dataString = localStorage.getItem(key);
