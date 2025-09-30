@@ -4,7 +4,7 @@
   "description": "Applicazione per registrare gli orari di entrata, uscita e calcolare le ore lavorate.",
   
   // Dove l'app dovrebbe iniziare quando viene lanciata dalla schermata Home
-  "start_url": "./",
+  "start_url": "./index.html",
   
   // Il modo in cui l'app appare: "standalone" la fa sembrare una vera app, senza barra del browser
   "display": "standalone",
@@ -16,8 +16,7 @@
   "background_color": "#ffffff",
   
   // Definizione delle Icone
-  // NOTA BENE: I percorsi QUI SOTTO DEVONO esistere nel tuo progetto.
-  // Sono richieste in formato PNG per la migliore qualità.
+  // ASSOLUTAMENTE FONDAMENTALE: Queste icone DEVONO essere presenti nella cartella /icons/
   "icons": [
     {
       "src": "/icons/icon-192x192.png",
@@ -30,7 +29,6 @@
       "type": "image/png"
     },
     {
-      // Icona mascherabile (per Android che si adatta alle diverse forme)
       "src": "/icons/maskable-icon-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
