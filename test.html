@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
   <meta charset="utf-8">
-  <title>App Firebase Pronta</title>
+  <title>App Firebase Pronta (Auto-login)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     html,body{margin:0;padding:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;background:#0b1220;color:#e7e9ee}
@@ -34,15 +34,9 @@
   <main>
     <div class="card">
       <div class="row">
-        <button id="btn-login-anon">Login anonimo</button>
-        <input id="email" type="email" placeholder="email">
-        <input id="password" type="password" placeholder="password">
-        <button id="btn-signup">Crea utente</button>
-        <button id="btn-login">Login</button>
-        <button id="btn-logout">Logout</button>
-        <span id="auth-state" class="muted right">Utente: nessuno</span>
+        <span id="auth-state" class="muted">Utente: in attesa…</span>
+        <span id="sync-status" class="muted right" hidden>Sincronizzazione…</span>
       </div>
-      <div id="sync-status" class="muted" hidden>Sincronizzazione in corso…</div>
       <div id="alerts" class="muted small"></div>
     </div>
 
@@ -69,7 +63,6 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
     import {
       getAuth, onAuthStateChanged, signInAnonymously,
-      signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut,
       connectAuthEmulator
     } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
     import {
@@ -78,178 +71,138 @@
       doc, deleteDoc, connectFirestoreEmulator
     } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
 
-    // Config "dummy" per app locale; non serve toccare nulla
-    const firebaseConfig = {
-      apiKey: "demo-key",
-      authDomain: "demo-local",
-      projectId: "demo-test",
-      appId: "demo-app"
-    };
+    // Config locale "dummy": non serve modificare
+    const firebaseConfig = { apiKey: "demo-key", authDomain: "demo-local", projectId: "demo-test", appId: "demo-app" };
 
-    // UI helpers
-    const $ = sel => document.querySelector(sel);
+    // Utility UI
+    const $ = s => document.querySelector(s);
     const hide = el => el && (el.hidden = true);
     const show = el => el && (el.hidden = false);
     const setText = (sel, txt) => { const el = typeof sel==='string' ? $(sel) : sel; if (el) el.textContent = txt; };
+    function showAlert(msg, cls='muted'){ const el = $('#alerts'); const ts = new Date().toLocaleTimeString(); el.innerHTML = `<div class="${cls}">[${ts}] ${msg}</div>` + el.innerHTML; }
 
-    function showAlert(msg, cls='muted') {
-      const el = $('#alerts');
-      const ts = new Date().toLocaleTimeString();
-      el.innerHTML = `<div class="${cls}">[${ts}] ${msg}</div>` + el.innerHTML;
-    }
-
-    // Overlay
+    // Overlay e stato sync
     const overlay = $('#init-overlay');
     const syncEl = $('#sync-status');
-    function closeOverlay() { if (overlay) overlay.style.display = 'none'; }
-    function openSync(msg='Sincronizzazione in corso…') { if (syncEl) { syncEl.textContent = msg; show(syncEl); } }
-    function closeSync() { hide(syncEl); }
+    const closeOverlay = () => { if (overlay) overlay.style.display = 'none'; };
+    const openSync = (m='Sincronizzazione…') => { if (syncEl){ syncEl.textContent=m; show(syncEl);} };
+    const closeSync = () => { hide(syncEl); };
 
-    document.addEventListener('DOMContentLoaded', () => {
-      closeOverlay();
-      openSync();
-    });
+    // Chiudi overlay subito al DOM pronto
+    document.addEventListener('DOMContentLoaded', () => { closeOverlay(); openSync('Avvio…'); });
 
-    // Init Firebase
+    // Inizializza Firebase
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
 
-    // Collegamento automatico agli Emulator se presenti
-    const EMU_HOST = location.hostname;
+    // Prova a collegarsi agli emulatori locali se presenti
     try {
-      connectAuthEmulator(auth, `http://${EMU_HOST}:9099`, { disableWarnings: true });
-      connectFirestoreEmulator(db, EMU_HOST, 8080);
-      showAlert('Connesso agli emulatori Firebase (auth:9099, firestore:8080)', 'ok');
+      const host = location.hostname;
+      connectAuthEmulator(auth, `http://${host}:9099`, { disableWarnings: true });
+      connectFirestoreEmulator(db, host, 8080);
       setText('#env', 'Ambiente: emulatori locali');
-    } catch(e) {
+      showAlert('Connesso agli emulatori (Auth:9099, Firestore:8080)', 'ok');
+    } catch(_) {
       setText('#env', 'Ambiente: locale');
     }
 
-    // Cache offline
-    enableIndexedDbPersistence(db).catch((err) => {
-      if (err.code === 'failed-precondition') {
-        showAlert('Persistence non disponibile (più tab aperte). Continuerà online-only.', 'warn');
-      } else {
-        showAlert('Persistence non disponibile: ' + err.message, 'warn');
-      }
+    // Abilita cache offline
+    enableIndexedDbPersistence(db).catch(err => {
+      if (err.code === 'failed-precondition') showAlert('Persistence disattivata (più tab aperte).', 'warn');
+      else showAlert('Persistence non disponibile: ' + err.message, 'warn');
     });
 
-    // Auth state
+    // Login anonimo automatico con retry
+    async function ensureAnonLogin(retries = 3){
+      for (let i=0;i<retries;i++){
+        try { await signInAnonymously(auth); return true; }
+        catch(e){ showAlert('Login anonimo fallito: ' + e.message, 'warn'); await new Promise(r=>setTimeout(r, 1000*(i+1))); }
+      }
+      showAlert('Procedo offline: le operazioni si sincronizzeranno quando disponibili.', 'warn');
+      return false;
+    }
+
+    // Stato auth
     onAuthStateChanged(auth, (user) => {
-      if (user) {
-        setText('#auth-state', `Utente: ${user.isAnonymous ? 'anonimo' : (user.email || 'sconosciuto')} (${user.uid.slice(0,6)}…)`);
+      if (user){
+        setText('#auth-state', `Utente: ${user.isAnonymous?'anonimo':'autenticato'} (${user.uid.slice(0,6)}…)`);
         subscribeItems(user.uid);
         closeSync();
-        showAlert('Autenticato', 'ok');
+        showAlert('Sessione attiva', 'ok');
       } else {
         setText('#auth-state', 'Utente: nessuno');
         unsubscribeItems();
-        showAlert('Non autenticato', 'warn');
       }
     });
 
-    // Pulsanti auth
-    $('#btn-login-anon').addEventListener('click', async () => {
-      openSync('Login anonimo…');
-      try { await signInAnonymously(auth); }
-      catch(e){ showAlert('Errore login anonimo: ' + e.message, 'err'); }
-      finally{ closeSync(); }
-    });
+    // Avvio
+    (async () => {
+      await ensureAnonLogin();
+      closeOverlay();
+      closeSync();
+    })();
 
-    $('#btn-login').addEventListener('click', async () => {
-      openSync('Login…');
-      try { await signInWithEmailAndPassword(auth, $('#email').value, $('#password').value); }
-      catch(e){ showAlert('Errore login: ' + e.message, 'err'); }
-      finally{ closeSync(); }
-    });
-
-    $('#btn-signup').addEventListener('click', async () => {
-      openSync('Creazione utente…');
-      try { await createUserWithEmailAndPassword(auth, $('#email').value, $('#password').value); showAlert('Utente creato', 'ok'); }
-      catch(e){ showAlert('Errore creazione: ' + e.message, 'err'); }
-      finally{ closeSync(); }
-    });
-
-    $('#btn-logout').addEventListener('click', async () => {
-      openSync('Logout…');
-      try { await signOut(auth); }
-      catch(e){ showAlert('Errore logout: ' + e.message, 'err'); }
-      finally{ closeSync(); }
-    });
-
-    // Lista e CRUD
+    // CRUD collegato all'utente
     let itemsUnsub = null;
+    function unsubscribeItems(){ if (itemsUnsub){ itemsUnsub(); itemsUnsub=null; } $('#items-body').innerHTML=''; }
 
-    function unsubscribeItems() {
-      if (itemsUnsub) { itemsUnsub(); itemsUnsub = null; }
-      $('#items-body').innerHTML = '';
-    }
-
-    function subscribeItems(uid) {
+    function subscribeItems(uid){
       unsubscribeItems();
       const colRef = collection(db, 'items');
-      const q = query(colRef, where('ownerUid', '==', uid), orderBy('createdAt', 'desc'));
-      itemsUnsub = onSnapshot(q, (snap) => {
-        const tbody = $('#items-body');
-        tbody.innerHTML = '';
-        snap.forEach(docSnap => {
+      const q = query(colRef, where('ownerUid','==',uid), orderBy('createdAt','desc'));
+      itemsUnsub = onSnapshot(q, (snap)=>{
+        const tbody = $('#items-body'); tbody.innerHTML='';
+        snap.forEach(docSnap=>{
           const d = docSnap.data();
           const tr = document.createElement('tr');
           tr.innerHTML = `
-            <td>${(d.title || '').toString().replace(/</g,'&lt;')}</td>
-            <td>${(d.notes || '').toString().replace(/</g,'&lt;')}</td>
-            <td><button data-id="${docSnap.id}" class="btn-del">Elimina</button></td>`;
+            <td>${(d.title||'').toString().replace(/</g,'&lt;')}</td>
+            <td>${(d.notes||'').toString().replace(/</g,'&lt;')}</td>
+            <td><button class="btn-del" data-id="${docSnap.id}">Elimina</button></td>`;
           tbody.appendChild(tr);
         });
-      }, (err) => {
-        showAlert('Errore stream: ' + err.message, 'err');
-      });
+      }, (err)=>{ showAlert('Errore stream: '+err.message, 'err'); });
     }
 
-    $('#btn-save').addEventListener('click', async () => {
+    // Salvataggio
+    $('#btn-save').addEventListener('click', async ()=>{
       const user = auth.currentUser;
-      if (!user) { showAlert('Serve autenticazione per salvare', 'warn'); return; }
+      if (!user) { showAlert('Sessione non pronta, ritento login…', 'warn'); await ensureAnonLogin(); }
+      const ready = !!auth.currentUser;
+      if (!ready){ showAlert('Non autenticato, riprova tra poco.', 'warn'); return; }
 
       const title = $('#item-title').value.trim();
       const notes = $('#item-notes').value.trim();
-      if (!title) { showAlert('Titolo obbligatorio', 'warn'); return; }
+      if (!title){ showAlert('Titolo obbligatorio', 'warn'); return; }
 
       openSync('Salvataggio…');
       try {
-        await addDoc(collection(db, 'items'), {
-          title, notes, ownerUid: user.uid, createdAt: serverTimestamp()
-        });
-        $('#item-title').value = '';
-        $('#item-notes').value = '';
+        await addDoc(collection(db, 'items'), { title, notes, ownerUid: auth.currentUser.uid, createdAt: serverTimestamp() });
+        $('#item-title').value=''; $('#item-notes').value='';
         showAlert('Elemento salvato', 'ok');
-      } catch (e) {
-        showAlert('Errore salvataggio: ' + e.message, 'err');
+      } catch(e){
+        showAlert('Errore salvataggio: '+e.message, 'err');
       } finally {
         closeSync();
       }
     });
 
-    document.addEventListener('click', async (e) => {
+    // Eliminazione
+    document.addEventListener('click', async (e)=>{
       const btn = e.target.closest('.btn-del');
       if (!btn) return;
-      const user = auth.currentUser;
-      if (!user) { showAlert('Serve autenticazione', 'warn'); return; }
       const id = btn.getAttribute('data-id');
+      if (!id) return;
       openSync('Eliminazione…');
-      try {
-        await deleteDoc(doc(db, 'items', id));
-        showAlert('Eliminato', 'ok');
-      } catch (e) {
-        showAlert('Errore eliminazione: ' + e.message, 'err');
-      } finally {
-        closeSync();
-      }
+      try { await deleteDoc(doc(db,'items',id)); showAlert('Eliminato','ok'); }
+      catch(e){ showAlert('Errore eliminazione: '+e.message, 'err'); }
+      finally{ closeSync(); }
     });
 
     // Fail-safe overlay
-    window.addEventListener('error', () => closeOverlay());
-    window.addEventListener('unhandledrejection', () => closeOverlay());
+    window.addEventListener('error', ()=>closeOverlay());
+    window.addEventListener('unhandledrejection', ()=>closeOverlay());
   </script>
 </body>
 </html>
