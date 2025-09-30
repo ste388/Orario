@@ -346,6 +346,19 @@
     const minutes = String(now.getMinutes()).padStart(2, '0');
     return `${hours}:${minutes}`;
   }
+  
+  /**
+   * Converte l'ID data (YYYY-MM-DD) in un oggetto Date usando UTC.
+   * Questo garantisce un punto di riferimento standard (00:00:00 UTC) per i confronti.
+   * @param {string} dateId - Data in formato YYYY-MM-DD.
+   * @returns {Date} Oggetto Date.
+   */
+  function dateIdToDate(dateId) {
+    const parts = dateId.split('-');
+    // Usiamo Date.UTC per evitare problemi di fuso orario quando si confrontano le date
+    // Nota: I mesi in JS vanno da 0 a 11, quindi Month - 1
+    return new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+  }
 
 
   // =======================================================================
@@ -748,22 +761,20 @@
   
   /**
    * Calcola la somma totale di tutti i minuti lavorati in un intervallo di date.
-   * Se startDateId e endDateId sono nulli, calcola il totale generale.
-   * @param {string | null} startDateId - Data di inizio (YYYY-MM-DD).
-   * @param {string | null} endDateId - Data di fine (YYYY-MM-DD).
+   * @param {string} startDateId - Data di inizio (YYYY-MM-DD).
+   * @param {string} endDateId - Data di fine (YYYY-MM-DD).
    */
   function calculateOverallTotalHours(startDateId, endDateId) {
       let overallTotalMinutes = 0;
-      let startFilterDate = null;
-      let endFilterDate = null;
+      let startFilterDate = dateIdToDate(startDateId);
+      let endFilterDate = dateIdToDate(endDateId);
       
-      // Imposta le date di filtro se fornite
-      if (startDateId && endDateId) {
-          startFilterDate = dateIdToDate(startDateId);
-          // Aggiunge un giorno per rendere l'intervallo INCLUSIVO
-          endFilterDate = dateIdToDate(endDateId);
-          endFilterDate.setUTCDate(endFilterDate.getUTCDate() + 1); 
-      }
+      // Aggiunge un giorno a endFilterDate per rendere l'intervallo INCLUSIVO
+      endFilterDate.setUTCDate(endFilterDate.getUTCDate() + 1);
+      
+      // Prepara i timestamp per il confronto robusto (FIX Mobile)
+      const startTimestamp = startFilterDate.getTime();
+      const endTimestamp = endFilterDate.getTime();
       
       for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
@@ -771,12 +782,12 @@
           if (key && key.startsWith(LOCAL_STORAGE_PREFIX) && key.length === (LOCAL_STORAGE_PREFIX.length + 10)) {
               const dateId = key.substring(LOCAL_STORAGE_PREFIX.length);
               
-              // Applica il filtro solo se le date sono definite
-              if (startFilterDate && endFilterDate) {
-                  const date = dateIdToDate(dateId);
-                  if (date < startFilterDate || date >= endFilterDate) {
-                      continue; // Salta se la data non è nell'intervallo
-                  }
+              const date = dateIdToDate(dateId);
+              const dateTimestamp = date.getTime();
+              
+              // Confronto robusto basato sul timestamp (FIX Mobile)
+              if (dateTimestamp < startTimestamp || dateTimestamp >= endTimestamp) {
+                  continue; // Salta se la data non è nell'intervallo
               }
               
               const dataString = localStorage.getItem(key);
@@ -807,11 +818,10 @@
         return;
     }
 
-    // Conversione e confronto usando i timestamp (FIX PER MOBILE)
     const startDate = dateIdToDate(startDateId);
     const endDate = dateIdToDate(endDateId);
 
-    // Confrontiamo i timestamp per un controllo affidabile dell'intervallo
+    // Confrontiamo i timestamp per un controllo affidabile dell'intervallo (FIX Mobile)
     if (startDate.getTime() <= endDate.getTime()) {
         const totalMinutes = calculateOverallTotalHours(startDateId, endDateId);
         const totalHoursDisplay = timeToDisplay(minutesToHoursString(totalMinutes));
@@ -826,13 +836,6 @@
   // =======================================================================
   // FUNZIONALITÀ ESPORTAZIONE EXCEL (.xlsx)
   // =======================================================================
-
-  function dateIdToDate(dateId) {
-    const parts = dateId.split('-');
-    // Usiamo Date.UTC per evitare problemi di fuso orario quando si confrontano le date
-    // Nota: I mesi in JS vanno da 0 a 11, quindi Month - 1
-    return new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
-  }
   
   function exportDataAsXLSX() {
     if (typeof XLSX === 'undefined') {
@@ -851,7 +854,7 @@
     const startDate = dateIdToDate(startDateInput);
     const endDate = dateIdToDate(endDateInput);
 
-    // Controllo robusto delle date (già implementato in updateExportTotalHours)
+    // Controllo robusto delle date (FIX Mobile)
     if (startDate.getTime() > endDate.getTime()) {
         updateStatus("La data di fine non può essere precedente alla data di inizio.", "error");
         return;
@@ -864,14 +867,19 @@
     const inclusiveEndDate = new Date(endDate);
     inclusiveEndDate.setUTCDate(inclusiveEndDate.getUTCDate() + 1); // Rende l'intervallo inclusivo
 
+    // Prepara i timestamp per il confronto robusto (FIX Mobile)
+    const startDateTimestamp = startDate.getTime();
+    const inclusiveEndDateTimestamp = inclusiveEndDate.getTime();
+
     for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
         
         if (key && key.startsWith(LOCAL_STORAGE_PREFIX) && key.length === (LOCAL_STORAGE_PREFIX.length + 10)) {
             const dateId = key.substring(LOCAL_STORAGE_PREFIX.length);
             const date = dateIdToDate(dateId);
-
-            if (date >= startDate && date < inclusiveEndDate) {
+            
+            // Confronto robusto basato sul timestamp (FIX Mobile)
+            if (date.getTime() >= startDateTimestamp && date.getTime() < inclusiveEndDateTimestamp) {
                 const dataString = localStorage.getItem(key);
                 try {
                     const data = JSON.parse(dataString);
