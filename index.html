@@ -348,16 +348,30 @@
   }
   
   /**
-   * Converte l'ID data (YYYY-MM-DD) in un oggetto Date usando UTC.
-   * Questo garantisce un punto di riferimento standard (00:00:00 UTC) per i confronti.
+   * CONVERSIONE DATA CRITICA PER COMPATIBILITÀ MOBILE:
+   * Converte l'ID data (YYYY-MM-DD) in un oggetto Date impostato
+   * alle 00:00:00 del fuso orario LOCALE. Questo è l'unico modo per
+   * garantire che il .getTime() sia coerente tra i browser.
    * @param {string} dateId - Data in formato YYYY-MM-DD.
-   * @returns {Date} Oggetto Date.
+   * @returns {Date} Oggetto Date valido.
    */
   function dateIdToDate(dateId) {
     const parts = dateId.split('-');
-    // Usiamo Date.UTC per evitare problemi di fuso orario quando si confrontano le date
-    // Nota: I mesi in JS vanno da 0 a 11, quindi Month - 1
-    return new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+    // Importante: i mesi in JS vanno da 0 a 11, quindi Month - 1
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1; 
+    const day = parseInt(parts[2], 10);
+    
+    // Crea la data nel fuso orario locale, alle 00:00:00
+    const date = new Date(year, month, day, 0, 0, 0, 0);
+    
+    // Verifica di compatibilità, se il timestamp è NaN, ritorna un fallback
+    if (isNaN(date.getTime())) {
+        console.error("Data creata non valida (NaN) per ID:", dateId);
+        return new Date(0); // Ritorna data zero per evitare errori
+    }
+    
+    return date;
   }
 
 
@@ -766,15 +780,14 @@
    */
   function calculateOverallTotalHours(startDateId, endDateId) {
       let overallTotalMinutes = 0;
+      
+      // Usa la funzione di parsing robusta per creare oggetti Date coerenti (00:00:00 locale)
       let startFilterDate = dateIdToDate(startDateId);
       let endFilterDate = dateIdToDate(endDateId);
       
-      // Aggiunge un giorno a endFilterDate per rendere l'intervallo INCLUSIVO
-      endFilterDate.setUTCDate(endFilterDate.getUTCDate() + 1);
-      
-      // Prepara i timestamp per il confronto robusto (FIX Mobile)
+      // Aggiunge 24 ore a endFilterDate per rendere l'intervallo INCLUSIVO
+      const endTimestamp = endFilterDate.getTime() + (24 * 60 * 60 * 1000);
       const startTimestamp = startFilterDate.getTime();
-      const endTimestamp = endFilterDate.getTime();
       
       for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
@@ -785,19 +798,17 @@
               const date = dateIdToDate(dateId);
               const dateTimestamp = date.getTime();
               
-              // Confronto robusto basato sul timestamp (FIX Mobile)
-              if (dateTimestamp < startTimestamp || dateTimestamp >= endTimestamp) {
-                  continue; // Salta se la data non è nell'intervallo
-              }
-              
-              const dataString = localStorage.getItem(key);
-              try {
-                  const data = JSON.parse(dataString);
-                  // Usiamo calculateDurations per ottenere i minuti lavorati per quel giorno
-                  const durations = calculateDurations(data); 
-                  overallTotalMinutes += durations.totalDurationMinutes;
-              } catch (e) {
-                  console.error("Errore di parsing o calcolo per la chiave:", key, e);
+              // Confronto robusto basato sul timestamp: [start, end)
+              if (dateTimestamp >= startTimestamp && dateTimestamp < endTimestamp) {
+                  const dataString = localStorage.getItem(key);
+                  try {
+                      const data = JSON.parse(dataString);
+                      // Usiamo calculateDurations per ottenere i minuti lavorati per quel giorno
+                      const durations = calculateDurations(data); 
+                      overallTotalMinutes += durations.totalDurationMinutes;
+                  } catch (e) {
+                      console.error("Errore di parsing o calcolo per la chiave:", key, e);
+                  }
               }
           }
       }
@@ -826,6 +837,7 @@
         const totalMinutes = calculateOverallTotalHours(startDateId, endDateId);
         const totalHoursDisplay = timeToDisplay(minutesToHoursString(totalMinutes));
         document.getElementById("overallTotalHours").textContent = totalHoursDisplay;
+        updateStatus("Totale ore intervallo aggiornato.", "info");
     } else {
         // Se l'intervallo è invertito
         document.getElementById("overallTotalHours").textContent = "00:00";
@@ -851,6 +863,7 @@
         return;
     }
 
+    // Usa la funzione di parsing robusta
     const startDate = dateIdToDate(startDateInput);
     const endDate = dateIdToDate(endDateInput);
 
@@ -864,12 +877,10 @@
 
     const exportData = [];
     let dataFound = false;
-    const inclusiveEndDate = new Date(endDate);
-    inclusiveEndDate.setUTCDate(inclusiveEndDate.getUTCDate() + 1); // Rende l'intervallo inclusivo
-
-    // Prepara i timestamp per il confronto robusto (FIX Mobile)
+    
+    // Rende l'intervallo inclusivo aggiungendo 24 ore (1 giorno) al timestamp di fine
     const startDateTimestamp = startDate.getTime();
-    const inclusiveEndDateTimestamp = inclusiveEndDate.getTime();
+    const inclusiveEndDateTimestamp = endDate.getTime() + (24 * 60 * 60 * 1000);
 
     for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
@@ -878,7 +889,7 @@
             const dateId = key.substring(LOCAL_STORAGE_PREFIX.length);
             const date = dateIdToDate(dateId);
             
-            // Confronto robusto basato sul timestamp (FIX Mobile)
+            // Confronto robusto basato sul timestamp: [start, end)
             if (date.getTime() >= startDateTimestamp && date.getTime() < inclusiveEndDateTimestamp) {
                 const dataString = localStorage.getItem(key);
                 try {
