@@ -56,6 +56,7 @@
     .calendar-day.selected .day-name { color: #dbeafe; } /* Grigio chiaro per il nome del giorno */
 
     /* STATI */
+    /* Logica aggiornata: Giallo se solo parzialmente compilato */
     .calendar-day.status-partial { background-color: #fffbeb; border-color: #fef08a; } 
     .calendar-day.status-partial .total-hours { color: #f59e0b; } 
     
@@ -163,7 +164,7 @@
     </div>
 
     <!-- Sezione: Risultati Calcolati -->
-    <h3 class="text-xl font-bold text-gray-700 mt-6 mb-3 text-center border-t pt-4 border-gray-200">Risultati Calcolati</h3>
+    <h3 class="text-xl font-bold text-gray-700 mt-6 mb-3 text-center border-t pt-4 border-gray-200">Risultati Calcolati Giornalieri</h3>
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
       
       <!-- Pausa Pranzo Card -->
@@ -192,6 +193,17 @@
   <!-- Sezione: Esporta Dati -->
   <div class="mt-8 p-6 border border-gray-200 rounded-xl bg-indigo-50 shadow-inner">
     <h3 class="text-xl font-bold text-gray-700 mb-4 text-center">Esporta Storico Orari</h3>
+    
+    <!-- NUOVO CAMPO: TOTALE ORE STORICO -->
+    <div class="flex justify-center mb-6">
+        <div class="p-4 rounded-lg shadow-lg bg-indigo-100 border border-indigo-300 w-full sm:w-1/2 text-center">
+            <div class="text-sm font-medium text-indigo-700 mb-1">Totale Ore Lavorate Storico</div>
+            <div id="overallTotalHours" class="text-4xl font-extrabold text-indigo-800">00:00</div>
+            <div class="text-xs font-semibold text-indigo-700 mt-1">(Totale tutti i giorni salvati)</div>
+        </div>
+    </div>
+    <!-- FINE NUOVO CAMPO -->
+
     <div class="flex flex-col sm:flex-row gap-4 items-center justify-center">
       <div class="w-full sm:w-auto">
         <label for="startDate" class="block text-sm font-medium text-gray-700">Data Inizio:</label>
@@ -273,6 +285,11 @@
     return hours * 60 + minutes;
   }
   
+  /**
+   * Converte i minuti totali in formato HHMM.
+   * @param {number} totalMinutes - Minuti totali.
+   * @returns {string} Formato HHMM (es. '0830').
+   */
   function minutesToHoursString(totalMinutes) {
     if (totalMinutes < 0 || isNaN(totalMinutes)) return "0000";
     const hours = Math.floor(totalMinutes / 60);
@@ -284,6 +301,11 @@
     return formattedHours + formattedMinutes; // Ritorna HHMM
   }
   
+  /**
+   * Converte il formato HHMM in formato visualizzazione HH:MM.
+   * @param {string} timeString - Formato HHMM (es. '0830').
+   * @returns {string} Formato visualizzazione (es. '08:30').
+   */
   function timeToDisplay(timeString) {
     if (!timeString || timeString.length !== 4) return '00:00'; 
     
@@ -326,7 +348,7 @@
 
 
   // =======================================================================
-  // LOGICA CALCOLI (LA LOGICA DINAMICA RICHIESTA È STATA MANTENUTA)
+  // LOGICA CALCOLI E AGGIORNAMENTO UI
   // =======================================================================
 
   /**
@@ -371,7 +393,7 @@
 
     } else if (mE1 > 0) {
         // Logica Fallback: (Se ho solo E1)
-        const TOTAL_TIME_SPAN_MINUTES = 480 + 60; // 9 hours
+        const TOTAL_TIME_SPAN_MINUTES = 480 + 60; // 9 hours (8 lavoro + 1 pausa)
         theoreticalExitMinutes = mE1 + TOTAL_TIME_SPAN_MINUTES;
         theoreticalExitDisplay = timeToDisplay(minutesToHoursString(theoreticalExitMinutes));
     }
@@ -399,7 +421,7 @@
     // 1. Totale Ore Lavorate
     document.getElementById("totalHours").textContent = results.totalHoursDisplay;
     
-    // 2. Pausa Pranzo e Styling (Card)
+    // 2. Pausa Pranzo e Styling (Card) (Omesso per brevità, stessa logica precedente)
     const pausaPranzoDisplay = document.getElementById("pausaPranzo");
     const pausaPranzoCard = document.getElementById("pausaPranzoCard");
     const pausaPranzoStatus = document.getElementById("pausaPranzoStatus"); 
@@ -435,35 +457,43 @@
         const dateId = formatDateId(selectedDate);
         const dayCell = document.querySelector(`.calendar-day[data-date="${dateId}"]`);
         if (dayCell) {
-            updateDayCellStatus(dayCell, results.totalDurationMinutes, results.totalHoursDisplay);
+            updateDayCellStatus(dayCell, results.totalDurationMinutes, results.totalHoursDisplay, inputValues);
         }
     }
   }
   
-  // =======================================================================
-  // PERSISTENZA (LOCAL STORAGE) E UI (Settimanale L-V)
-  // =======================================================================
-  
   /**
    * Aggiorna lo stato visivo di una cella giorno.
+   * @param {HTMLElement} dayCell - La cella del giorno da aggiornare.
+   * @param {number} totalMinutes - Minuti lavorati totali.
+   * @param {string} totalHoursDisplay - Ore lavorate in formato HH:MM.
+   * @param {object} data - Dati grezzi HHMM (opzionale, per status parziale).
    */
-  function updateDayCellStatus(dayCell, totalMinutes, totalHoursDisplay) {
+  function updateDayCellStatus(dayCell, totalMinutes, totalHoursDisplay, data = {}) {
         dayCell.classList.remove("status-partial", "status-complete");
         const hoursSpan = dayCell.querySelector('.total-hours') || document.createElement('span');
         hoursSpan.className = 'total-hours';
         
-        if (totalMinutes > 0) {
+        let filledCount = 0;
+        if (Object.keys(data).length > 0) {
+            // Conta quante timbrature sono state inserite (non zero)
+            filledCount = Object.keys(data).filter(key => data[key] && data[key] !== "0000" && timeToMinutes(data[key]) > 0).length;
+        }
+
+        if (totalMinutes > 0 || filledCount > 0) { // Mostra un'indicazione se ci sono minuti o solo timbrature parziali
             if (totalMinutes >= TARGET_MINUTES) {
                 dayCell.classList.add("status-complete");
-            } else {
+            } else if (filledCount > 0) {
+                // Nuova logica richiesta: Giallo se almeno una timbratura è presente ma non è completa (o 0 ore)
                 dayCell.classList.add("status-partial");
             }
+            
             hoursSpan.textContent = totalHoursDisplay;
             if (!dayCell.contains(hoursSpan)) {
                 dayCell.appendChild(hoursSpan);
             }
         } else {
-             // Rimuove l'indicatore di ore se sono 0
+             // Rimuove l'indicatore di ore se sono 0 e non ci sono timbrature
             if (dayCell.contains(hoursSpan)) {
                 dayCell.removeChild(hoursSpan);
             }
@@ -500,16 +530,15 @@
       // Carica i dati dal localStorage per questo giorno
       const dataString = localStorage.getItem(LOCAL_STORAGE_PREFIX + dateId);
       let dataStatus = null;
+      let data = {};
       if (dataString) {
           try {
-              const data = JSON.parse(dataString);
+              data = JSON.parse(dataString);
               const durations = calculateDurations(data); 
-              let filled = 0;
-              ["entrataMattina", "uscitaPranzo", "entrataPomeriggio", "uscitaSera"].forEach(f => {
-                    if (data[f] && data[f] !== "0000") filled++;
-              });
+              let filled = Object.keys(data).filter(f => data[f] && data[f] !== "0000" && timeToMinutes(data[f]) > 0).length;
 
               dataStatus = {
+                  data: data,
                   status: filled === 4 ? 'complete' : (filled > 0 ? 'partial' : 'empty'),
                   totalHours: durations.totalHoursDisplay,
                   totalMinutes: durations.totalDurationMinutes
@@ -525,7 +554,7 @@
       `;
 
       if (dataStatus) {
-         updateDayCellStatus(dayCell, dataStatus.totalMinutes, dataStatus.totalHours);
+         updateDayCellStatus(dayCell, dataStatus.totalMinutes, dataStatus.totalHours, dataStatus.data);
       }
       
       // Seleziona il giorno
@@ -533,6 +562,9 @@
       dayCell.onclick = () => { selectDate(date); };
       calendarGrid.appendChild(dayCell);
     });
+    
+    // Aggiorna il totale storico
+    calculateOverallTotalHours();
   }
 
   function changeWeek(offset) {
@@ -677,6 +709,7 @@
                 inputField.value = currentTime;
                 inputField.classList.remove('italic-placeholder');
                 
+                // Forza l'evento blur per applicare la formattazione e ricalcolare
                 const event = new Event('blur');
                 inputField.dispatchEvent(event);
                 
@@ -699,13 +732,47 @@
       localStorage.setItem(key, JSON.stringify(dataToSave));
       updateStatus("Orario per la data selezionata salvato con successo nel Local Storage!", "success");
       
-      // Aggiorna la cella del giorno sul calendario
+      // Aggiorna la cella del giorno sul calendario e il totale storico
       renderCalendar(); 
+      calculateOverallTotalHours();
 
     } catch (e) {
       console.error("Errore nel salvataggio su Local Storage:", e);
       updateStatus("Errore nel salvataggio. Controlla la console.", "error");
     }
+  }
+  
+  // =======================================================================
+  // CALCOLO TOTALE ORE STORICO
+  // =======================================================================
+  
+  /**
+   * Calcola la somma totale di tutti i minuti lavorati in tutti i dati salvati.
+   */
+  function calculateOverallTotalHours() {
+      let overallTotalMinutes = 0;
+      
+      for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          
+          if (key && key.startsWith(LOCAL_STORAGE_PREFIX)) {
+              const dataString = localStorage.getItem(key);
+              try {
+                  const data = JSON.parse(dataString);
+                  // Usiamo calculateDurations per ottenere i minuti lavorati per quel giorno
+                  const durations = calculateDurations(data); 
+                  overallTotalMinutes += durations.totalDurationMinutes;
+              } catch (e) {
+                  console.error("Errore di parsing o calcolo per la chiave:", key, e);
+              }
+          }
+      }
+      
+      // Converti il totale generale in formato HH:MM
+      const totalHoursDisplay = timeToDisplay(minutesToHoursString(overallTotalMinutes));
+      
+      // Aggiorna l'elemento nella UI
+      document.getElementById("overallTotalHours").textContent = totalHoursDisplay;
   }
   
   // =======================================================================
@@ -832,7 +899,7 @@
     currentWeekStart = getStartOfWeek(selectedDate);
     
     updateStatus("Applicazione inizializzata. Dati salvati in Local Storage.");
-    renderCalendar();
+    renderCalendar(); // Esegue anche il calcolo del totale storico
     selectDate(selectedDate);
     addInputListeners();
     initializeExportInputs(); // Inizializza l'intervallo di esportazione con il mese corrente
